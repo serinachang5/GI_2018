@@ -5,7 +5,7 @@ preprocessor
 
 Original Author: Siddharth Varia
 Author: Ruiqi Zhong
-Date: 04/19/108
+Date: 04/19/2018
 This module contains a function that perform preprocessing on strings.
 I modified the preprocess as follows:
 i) splitting emojis that were not splitted by spaces
@@ -25,6 +25,32 @@ excluded = set([b'\xf0\x9f\x8f\xbc',
                 b'\xef\xb8\x8f',
                 b'\xe2\x99\x82',
                 b'\xe2\x80\x8d'])
+
+def to_char_array(s):
+    """
+    making a binary string a list of chars
+    take special care of emojis
+
+    Parameters
+    ----------
+    s: a binary string of interest
+
+    Returns
+    -------
+    char_array: a list of i) int if char has ascii 2) bytes if char is an emoji
+    """
+    if type(s) != bytes:
+        raise ValueError('Input to to_char_array function should be in bytes')
+    char_array = []
+    tokens = s.split(b' ')
+    for token in tokens:
+        char_array.append(ord(' '))
+        if isemoji(token):
+            char_array.append(token)
+            continue
+        for c in token:
+            char_array.append(c)
+    return char_array[1:]
 
 # check whether an emoji is an emoji modifier
 # (e.g. skin colors, etc)
@@ -50,6 +76,7 @@ def isemoji(c):
     -------
     a boolean indicating whether the character is an emoji
     """
+    c = bytes(c)
     return c.decode() in UNICODE_EMOJI
 
 # a list of regular expressions that perform the preprocessing
@@ -72,7 +99,12 @@ def tokenize(s):
     return tokens_re.findall(s)
 
 # preprocess a raw string and returns its utf-8 representation
-def preprocess(s, lowercase = True, debug=False):
+def preprocess(s, debug=False):
+
+    # assert type of the input: must be a unicode string
+    if type(s) != str:
+        raise ValueError('Input to the preprocess function must be a unicode string')
+    
     # make a copy of the original string
     original_string = s[:]
     # put a space after every emoji
@@ -122,4 +154,5 @@ def preprocess(s, lowercase = True, debug=False):
 # a test case
 if __name__ == '__main__':
     s = 'FREE 🔓🔓 BRO @ReesemoneySODMG Shit is FU 😤😤👿 .....👮🏽👮🏽💥💥💥🔫'
-    preprocess(s, debug=True)
+    binary_str = preprocess(s, debug=True)
+    print(to_char_array(binary_str))
