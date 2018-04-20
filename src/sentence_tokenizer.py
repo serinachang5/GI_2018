@@ -8,6 +8,16 @@ char2property = pkl.load(open('../model/char.pkl', 'rb'))
 id2word = dict([(word2property[word]['id'], word.decode()) for word in word2property])
 id2char = dict([(char2property[c]['id'], chr(c) if bytes(c) < bytes(256) else c.decode()) for c in char2property])
 
+# Given an array of integer, return a unicode representation
+def unicode_rep(arr, option='word'):
+    if option == 'char':
+        return ''.join([id2char[id] for id in arr])
+    elif option == 'word':
+        return ' '.join([id2word[id] for id in arr])
+    else:
+        raise ValueError('option %s is not implemented.' % option)
+
+
 def int_array_rep(s, option='word', vocab_count=30000, debug=False):
     """
     Given a unicode string and the vocab2property file (preprocessed)
@@ -56,4 +66,5 @@ def int_array_rep(s, option='word', vocab_count=30000, debug=False):
 
 if __name__ == '__main__':
     s = 'FREE 🔓🔓 BRO @ReesemoneySODMG Shit is FU 😤😤👿 .....👮🏽👮🏽💥💥💥🔫'
-    print(int_array_rep(s, option='char', debug=True))
+    arr = int_array_rep(s, option='word', debug=True)
+    print(unicode_rep(arr, option='word'))

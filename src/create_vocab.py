@@ -14,10 +14,19 @@ import pickle as pkl
 # count the number of ocurrences of char and word in a list of data directory
 def count_occurrence(corpus_dirs):
     corpus_word_count, corpus_char_count = {}, {}
+    tweet_id_read = set()
     for corpus_dir in corpus_dirs:
         df = pd.read_csv(corpus_dir)
         texts = df['text'].values
-        for text in texts:
+        tweet_ids = df['tweet_id'].values
+        for idx in range(len(texts)):
+            # avoid reading the same tweet from two files twice
+            text, tweet_id = texts[idx], tweet_ids[idx]
+            if tweet_id in tweet_id_read:
+                continue
+            else:
+                tweet_id_read.add(tweet_id)
+
             # preprocess the text
             text_bytes = preprocess(str(text))
             char_array = to_char_array(text_bytes)
@@ -116,8 +125,8 @@ def create_vocab(labeled_corpuses, unlabeled_corpuses, word_file_dir, char_file_
         pkl.dump(char2property, out_char_file)
 
 if __name__ == '__main__':
-    labeled_corpuses = ['../data/combined_' + t + '.csv' for t in ['tr', 'val', 'test']]
-    # unlabeled_corpuses = ['../data/ScrapedTweets_26thOct.csv']
-    unlabeled_corpuses = ['../data/mini.csv']
+    labeled_corpuses = ['../data/tweets_2018_03_21/tweets_2018_03_21_' + t + '.csv'
+                        for t in ['tr', 'val', 'test', 'ensemble']]
+    unlabeled_corpuses = ['../data/ScrapedTweets_26thOct.csv', '../data/gnip_data.csv']
     word_file_dir, char_file_dir = ['../model/' + s + '.pkl' for s in ['word', 'char']]
     create_vocab(labeled_corpuses, unlabeled_corpuses, word_file_dir, char_file_dir, verbose=True)
