@@ -1,0 +1,9 @@
+# ignore anything in the data directory, so we don't accidentally push it
+data/
+
+# ignore any notebook checkpoints
+src/.ipynb_checkpoints/
+
+# ignore pycache
+src/__pycache__/
+
