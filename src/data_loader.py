@@ -39,6 +39,8 @@ class Data_loader:
         else:
             self.id2token = dict([(self.token2property[c]['id'], chr(c) if bytes(c) < bytes(256) else c.decode())
                                   for c in self.token2property])
+        if verbose:
+            print('%d vocab is considered.' % min(len(self.id2token), self.vocab_size))
 
         # loading tweet level data
         if verbose:
@@ -49,6 +51,8 @@ class Data_loader:
             print('Processing tweets ...')
         for tweet_id in self.data['data']:
             self.process_tweet_dictionary(self.data['data'][tweet_id])
+        if verbose:
+            print('Data loader initialization finishes')
 
     def cv_data(self, fold_idx):
         """
