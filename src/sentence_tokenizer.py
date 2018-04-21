@@ -18,7 +18,7 @@ def unicode_rep(arr, option='word'):
         raise ValueError('option %s is not implemented.' % option)
 
 
-def int_array_rep(s, option='word', vocab_count=30000, debug=False):
+def int_array_rep(s, option='word', vocab_count=50000, debug=False):
     """
     Given a unicode string and the vocab2property file (preprocessed)
     Return an int array representation of the sentence
@@ -62,7 +62,6 @@ def int_array_rep(s, option='word', vocab_count=30000, debug=False):
         return result
     else:
         raise ValueError('Option %s not implemented' % option)
-
 
 if __name__ == '__main__':
     s = 'FREE 🔓🔓 BRO @ReesemoneySODMG Shit is FU 😤😤👿 .....👮🏽👮🏽💥💥💥🔫'
