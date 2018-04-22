@@ -42,6 +42,12 @@ class Data_loader:
         if verbose:
             print('%d vocab is considered.' % min(len(self.id2token), self.vocab_size))
 
+        # loading user information
+        self.user2property = pkl.load(open('../model/user.pkl', 'rb'))
+        self.id2user = dict([(self.user2property[user_name]['id'], user_name) for user_name in self.user2property])
+        if verbose:
+            print('Loading user information finished')
+
         # loading tweet level data
         if verbose:
             print('Loading tweets ...')
@@ -66,7 +72,7 @@ class Data_loader:
         -------
         tr, val, test: train, val, test data for the current fold
         """
-        cv_ind = self.data['ind']['cross_val'][fold_idx]
+        cv_ind = self.data['classification_ind']['cross_val'][fold_idx]
         tr, val, test = (self.get_records_by_idxes(cv_ind['train_ind']),
                          self.get_records_by_idxes(cv_ind['val_ind']),
                          self.get_records_by_idxes(cv_ind['test_ind']))
@@ -75,12 +81,12 @@ class Data_loader:
     # retrieving data for ensemble
     # similar to cv_data function
     def ensemble_data(self):
-        return self.get_records_by_idxes(self.data['ind']['ensemble_ind'])
+        return self.get_records_by_idxes(self.data['classification_ind']['ensemble_ind'])
 
     # retrieving data for testing
     # similar to cv_data function
     def test_data(self):
-        return self.get_records_by_idxes(self.data['ind']['heldout_test_ind'])
+        return self.get_records_by_idxes(self.data['classification_ind']['heldout_test_ind'])
 
     # return all the data for unsupervised learning
     def all_data(self):
@@ -95,9 +101,39 @@ class Data_loader:
         int_arr = self.pad_int_arr(int_arr)
         return int_arr
 
+    def tweets_by_user(self, user_id):
+        """
+        Given a user id, return a list of tweets posted by that user, sorted by time
+
+        Parameters
+        ----------
+        user_id: the user_id of interest
+
+        Returns
+        -------
+        a list of tweet dictionaries, None if that user id does not have a list
+        """
+        tweet_ids = self.data['user_time_ind'].get(user_id)
+        if tweet_ids is None:
+            return None
+        return self.get_records_by_idxes(self.data['user_time_ind'][user_id])
+
     # convert an int array to the unicode representation
     def convert2unicode(self, int_arr):
         return self.separator.join([self.id2token[id] for id in int_arr])
+
+    def print_recovered_tweet(self, tweet_property):
+        for key in tweet_property:
+            print("%s: %s" % (key, tweet_property[key]))
+        print('User %s posted the tweet.' % self.id2user[tweet_property['user_post']])
+        print('Users being mentioned: ' + ', '.join([self.id2user[user_id] for user_id in tweet_property['user_mentions']]))
+        if tweet_property.get('user_retweet') is not None:
+            print('Retweet from %s.' % self.id2user[tweet_property['user_retweet']])
+        print('original tweet content: ' + self.convert2unicode(tweet_property['int_arr']))
+
+    # get the user name of an id
+    def id2user_name(self, id):
+        return self.id2user[id]
 
     # ========== Below are the helper functions of the class ==========
 
@@ -124,5 +160,11 @@ if __name__ == '__main__':
     dl = Data_loader(vocab_size=40000, max_len=50, option='word')
     fold_idx = 0
     tr, val, test = dl.cv_data(fold_idx)
-    print(tr[0])
-    print(dl.convert2unicode(tr[0]['int_arr']))
+    for idx in range(10):
+        print('-------------')
+        dl.print_recovered_tweet(tr[idx])
+
+    user_tweets = dl.tweets_by_user(2)
+    for idx in range(10):
+        print('-------------')
+        dl.print_recovered_tweet(user_tweets[idx])

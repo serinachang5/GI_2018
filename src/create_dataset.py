@@ -4,6 +4,9 @@ from dateutil import parser
 import time
 import random
 import pickle as pkl
+from preprocess import extract_mentioned_user_name, extract_user_rt
+
+user2property = pkl.load(open('../model/user.pkl', 'rb'))
 
 # a function that checks whether the idx dictionary satisfies the criteria
 def assert_idx_correctness(idx_dictionary):
@@ -65,13 +68,39 @@ def process_data_entries(record):
     record['word_int_arr'] = int_array_rep(str(record['text']))
     record['char_int_arr'] = int_array_rep(str(record['text']), option='char')
 
+    # indexing the user who made the post
+    user_name = record['user_name'].lower()
+    if user2property.get(user_name) is None:
+        record['user_post'] = 1
+    else:
+        record['user_post'] = user2property[user_name]['id']
+
+    # indexing users being mentioned
+    user_mentions = extract_mentioned_user_name(str(record['text']))
+    record['user_mentions'] = []
+    for user_name in user_mentions:
+        user_name = user_name.lower()
+        if user2property.get(user_name) is None:
+            record['user_mentions'].append(1)
+        else:
+            record['user_mentions'].append(user2property[user_name]['id'])
+
+    rt_user = extract_user_rt(str(record['text']))
+    if rt_user is not None:
+        rt_user = rt_user.lower()
+        if user2property.get(rt_user) is None:
+            record['user_retweet'] = 1
+        else:
+            record['user_retweet'] = user2property[rt_user]['id']
+
     # time posted
     time_str = record['created_at']
     date_time_created = parser.parse(str(time_str))
-    record['created_at'] = date_time_created
+    record['created_at'] = date_time_created.replace(tzinfo=None)
 
     # the text is deliberately deleted to ensure coherence of indexing across implementation
     del record['text']
+    del record['user_name']
 
 def create_cv_idx(tr, val, idx_dictionary, fold):
     """
@@ -127,6 +156,21 @@ def create_data_idx(labeled_corpuses, fold=5):
     create_cv_idx(tr, val, idx_dictionary, fold)
     return idx_dictionary
 
+def user_time_indexing(data_dictionary):
+    indexing = {}
+    for tweet_id in data_dictionary:
+        tweet_property = data_dictionary[tweet_id]
+        user_post = tweet_property['user_post']
+        if user_post == 1:
+            continue
+        else:
+            if indexing.get(user_post) is None:
+                indexing[user_post] = []
+            indexing[user_post].append(tweet_id)
+    for user_post in indexing:
+        indexing[user_post] = sorted(indexing[user_post], key=lambda tid: data_dictionary[tid]['created_at'])
+    return indexing
+
 def create_dataset(labeled_corpuses, unlabeled_corpuses, verbose=False):
     data_dictionary = retrieve_content(labeled_corpuses, unlabeled_corpuses, verbose)
 
@@ -140,11 +184,15 @@ def create_dataset(labeled_corpuses, unlabeled_corpuses, verbose=False):
     idx_dictionary = create_data_idx(labeled_corpuses)
 
     if verbose:
-        print('Checking correctness of the index dictionary')
+        print('checking correctness of the index dictionary')
         print_meta_info(idx_dictionary)
     assert_idx_correctness(idx_dictionary)
 
-    data = {'data': data_dictionary, 'ind': idx_dictionary}
+    if verbose:
+        print('creating user-time indexing')
+    user_time_ind = user_time_indexing(data_dictionary)
+
+    data = {'data': data_dictionary, 'classification_ind': idx_dictionary, 'user_time_ind': user_time_ind}
     if verbose:
         print('dumping data')
     pkl.dump(data, open('../data/data.pkl', 'wb'))

@@ -26,6 +26,30 @@ excluded = set([b'\xf0\x9f\x8f\xbc',
                 b'\xe2\x99\x82',
                 b'\xe2\x80\x8d'])
 
+
+def extract_mentioned_user_name(s):
+    s = str(s)
+    if len(s) <= 2:
+        return set()
+    if s[:2] == 'RT':
+        return set()
+    tokens = s.split(' ')
+    mentioned_users = set()
+    for token in tokens:
+        if len(token) > 2 and token[0] == '@':
+            mentioned_user = token[1:]
+            mentioned_users.add(mentioned_user.lower())
+    return mentioned_users
+
+def extract_user_rt(s):
+    s = str(s)
+    if len(s) <= 2 or s[:2] != 'RT':
+        return None
+    tokens = s.split(' ')
+    if len(tokens) > 2 and len(tokens[1]) >= 2:
+        return tokens[1][1:-1].lower()
+    return None
+
 def to_char_array(s):
     """
     making a binary string a list of chars
@@ -76,6 +100,8 @@ def isemoji(c):
     -------
     a boolean indicating whether the character is an emoji
     """
+    if type(c) == str:
+        c = c.encode('utf-8')
     c = bytes(c)
     return c.decode() in UNICODE_EMOJI
 
@@ -153,6 +179,9 @@ def preprocess(s, debug=False):
 
 # a test case
 if __name__ == '__main__':
-    s = 'FREE 🔓🔓 BRO @ReesemoneySODMG Shit is FU 😤😤👿 .....👮🏽👮🏽💥💥💥🔫'
+    # s = 'FREE 🔓🔓 BRO @ReesemoneySODMG Shit is FU 😤😤👿 .....👮🏽👮🏽💥💥💥🔫'
+    # s = 'RT @Ebkfoee: 🔥🔥🔥🔥🔥 @Ebkfoe_ https://t.co/xWzNGMduby'
     binary_str = preprocess(s, debug=True)
     print(to_char_array(binary_str))
+    print(extract_mentioned_user_name(s))
+    print(extract_user_rt(s))
