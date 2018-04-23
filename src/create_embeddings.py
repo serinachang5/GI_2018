@@ -10,8 +10,8 @@ Train embeddings on the indices in Data Loader (labeled + unlabeled data).
 import argparse
 from data_loader import Data_loader
 import gensim
-import numpy as np
 import pickle
+import numpy as np
 from sklearn.feature_extraction.text import CountVectorizer
 
 
@@ -40,24 +40,23 @@ def generate_svd_embs(sentences, option):
 
 	# get positive pointwise mutual info matrix
 	mat, vocab = get_ppmi(sentences)
-	print('PPMI for word0, 0-20:', mat[0][:20])
 
 	# singular value decomposition - find most important eigenvalues
 	u,s,v = np.linalg.svd(mat)
 	print('Computed SVD')
-	print('Emb for word0, up to dim20:', u[0][:20])
+	u = np.array(u)  # convert from matrixlib
 
 	# make dictionary of unigram : embedding (truncated)
 	embs = {}
 	for i, word in enumerate(vocab):
-		ui = u[i]
-		embs[word] = (ui[:size]).tolist()
-	print('Embedding dim:', len(embs['you']))
+		embs[word] = u[i, :size]
+	print('Embedding dim:', len(list(embs.values())[0]))
 
 	# save as pickle file
-	out_file = 'svd_{0}_s{1}.pkl'.format(option, size)
-	pickle.dump(embs, open(out_file, 'wb'))
-	print('SVD embeddings saved to', out_file)
+	out_file_name = 'svd_{0}_s{1}.pkl'.format(option, size)
+	with open(out_file_name, 'wb') as out_file:
+		pickle.dump(embs, out_file)
+	print('SVD embeddings saved to', out_file_name)
 
 
 def get_ppmi(sentences):
@@ -112,27 +111,21 @@ def main(args):
 		for tweet in dl.all_data():
 			# need in unicode form
 			sentences.append(dl.convert2unicode(tweet['int_arr']))
-		print('Check sentences:', sentences[0])
+		print('Check sentence0:', sentences[0])
 		generate_svd_embs(sentences, option)
 
 
 if __name__ == '__main__':
-	# parser = argparse.ArgumentParser(description = '')
-	# parser.add_argument('-opt', '--option', type = str, default = 'word', help = 'embedding option: {\'word\', \'char\'}')
-	# parser.add_argument('-md', '--mode', type = str, default = 'w2v', help = 'mode of embedding: {\'w2v\', \'svd\'}')
-    #
-	# parser.add_argument('-dim', '--dim', type = int, default = 300, help = 'dimension of embeddings')
-	# parser.add_argument('-min', '--min_count', type = int, default = 5, help = 'min_count for word2vec; ignored if svd')
-	# parser.add_argument('-win', '--window', type = int, default = 5, help = 'window for word2vec; ignored if svd')
-	# parser.add_argument('-it', '--iter', type = int, default = 20, help = 'iterations for word2vec; ignored if svd')
-    #
-	# args = vars(parser.parse_args())
-	# print(args)
-    #
-	# main(args)
+	parser = argparse.ArgumentParser(description = '')
+	parser.add_argument('-opt', '--option', type = str, default = 'word', help = 'embedding option: {\'word\', \'char\'}')
+	parser.add_argument('-md', '--mode', type = str, default = 'w2v', help = 'mode of embedding: {\'w2v\', \'svd\'}')
 
-	test_sentences = ['hello it is me',
-					  'hello it\'s me',
-					  'hello hello',
-					  'me is here']
-	get_ppmi(test_sentences)
+	parser.add_argument('-dim', '--dim', type = int, default = 300, help = 'dimension of embeddings')
+	parser.add_argument('-min', '--min_count', type = int, default = 5, help = 'min_count for word2vec; ignored if svd')
+	parser.add_argument('-win', '--window', type = int, default = 5, help = 'window for word2vec; ignored if svd')
+	parser.add_argument('-it', '--iter', type = int, default = 20, help = 'iterations for word2vec; ignored if svd')
+
+	args = vars(parser.parse_args())
+	print(args)
+
+	main(args)
