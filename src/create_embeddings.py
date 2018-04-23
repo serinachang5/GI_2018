@@ -2,7 +2,7 @@
 ===================
 create_embeddings
 ===================
-Author: Ethan Adams & Serina Chang
+Authors: Ethan Adams & Serina Chang
 Date: 04/22/2018
 Train embeddings on the indices in Data Loader (labeled + unlabeled data).
 """
@@ -65,27 +65,27 @@ def get_ppmi(sentences):
 	counts = count_model.fit_transform(sentences)
 	counts.data = np.fmin(np.ones(counts.data.shape), counts.data)  # want occurence, not count
 	n,v = counts.shape  # n is num of docs, v is vocab size
-	print('n = {}, v = {}').format(n,v)
-	vocab = sorted(count_model.vocabulary_.items(), key=lambda x: x[1], reverse=True)  # sort by descending frequency
+	print('n = {}, v = {}'.format(n,v))
+	vocab = sorted(count_model.vocabulary_.items(), key=lambda x: x[1])  # sort by idx
 	vocab = [x[0] for x in vocab]
-	print('Top 10 words in vocab:', vocab[:10])
+	print('First 10 words in vocab:', vocab[:10])
 
-	coo = (counts.T).dot(counts)  # co-occurence matrix
-	coo.setdiag(1)  # fill same word co-occurence to 1 so every word has at least one coo
+	coo = (counts.T).dot(counts)  # co-occurence matrix is v by v
+	coo.setdiag(0)  # set same-word to 0
+	coo = coo + np.full(coo.shape, .0001)  # smoothing
 
-	marginalized = coo.sum(axis=0)  # num of coo per x
-	prob_norm = coo.sum()  # sum of all coo
+	marginalized = coo.sum(axis=0)  # smoothed num of coo per word
+	prob_norm = coo.sum()  # smoothed sum of all coo
 	print('Prob_norm:', prob_norm)
 	row_mat = np.ones((v, v), dtype=np.float)
 	for i in range(v):
 		prob = marginalized[0,i] / prob_norm
 		row_mat[i,:] = prob
 	col_mat = row_mat.T
-	joint = coo.toarray() / prob_norm
+	joint = coo / prob_norm
 
 	P = joint / (row_mat * col_mat)  # elementwise
-	with np.errstate(divide='ignore'):  # ignore 0
-		P = np.fmax(np.zeros((v, v), dtype=np.float), np.log(P))  # all elements >= 0
+	P = np.fmax(np.zeros((v, v), dtype=np.float), np.log(P))  # all elements >= 0
 	print('Computed PPMI:', P.shape)
 	return P, vocab
 
@@ -112,19 +112,27 @@ def main(args):
 		for tweet in dl.all_data():
 			# need in unicode form
 			sentences.append(dl.convert2unicode(tweet['int_arr']))
+		print('Check sentences:', sentences[0])
 		generate_svd_embs(sentences, option)
 
 
 if __name__ == '__main__':
-	parser = argparse.ArgumentParser(description = '')
-	parser.add_argument('-opt', '--option', type = str, default = 'word', help = 'embedding option: {\'word\', \'char\'}')
-	parser.add_argument('-md', '--mode', type = str, default = 'w2v', help = 'mode of embedding: {\'w2v\', \'svd\'}')
+	# parser = argparse.ArgumentParser(description = '')
+	# parser.add_argument('-opt', '--option', type = str, default = 'word', help = 'embedding option: {\'word\', \'char\'}')
+	# parser.add_argument('-md', '--mode', type = str, default = 'w2v', help = 'mode of embedding: {\'w2v\', \'svd\'}')
+    #
+	# parser.add_argument('-dim', '--dim', type = int, default = 300, help = 'dimension of embeddings')
+	# parser.add_argument('-min', '--min_count', type = int, default = 5, help = 'min_count for word2vec; ignored if svd')
+	# parser.add_argument('-win', '--window', type = int, default = 5, help = 'window for word2vec; ignored if svd')
+	# parser.add_argument('-it', '--iter', type = int, default = 20, help = 'iterations for word2vec; ignored if svd')
+    #
+	# args = vars(parser.parse_args())
+	# print(args)
+    #
+	# main(args)
 
-	parser.add_argument('-dim', '--dim', type = int, default = 300, help = 'dimension of embeddings')
-	parser.add_argument('-min', '--min_count', type = int, default = 5, help = 'min_count for word2vec; ignored if svd')
-	parser.add_argument('-win', '--window', type = int, default = 5, help = 'window for word2vec; ignored if svd')
-	parser.add_argument('-it', '--iter', type = int, default = 20, help = 'iterations for word2vec; ignored if svd')
-
-	args = vars(parser.parse_args())
-
-	main(args)
+	test_sentences = ['hello it is me',
+					  'hello it\'s me',
+					  'hello hello',
+					  'me is here']
+	get_ppmi(test_sentences)
