@@ -4,7 +4,7 @@ create_embeddings
 ===================
 Authors: Ethan Adams & Serina Chang
 Date: 04/22/2018
-Train embeddings on the indices in Data Loader (labeled + unlabeled data).
+Train embeddings on the tweets in Data Loader (labeled + unlabeled data).
 """
 
 import argparse
@@ -58,8 +58,6 @@ def generate_svd_embs(sentences, option):
 		pickle.dump(embs, f)
 	print('SVD embeddings saved to', out_file)
 
-	write_embeddings(embs, 'svd_{0}_s{1}'.format(option, size))
-
 
 def get_ppmi(sentences):
 	count_model = CountVectorizer(lowercase=True, max_features=20000)
@@ -91,26 +89,6 @@ def get_ppmi(sentences):
 	return P, vocab
 
 
-def write_embeddings(embs, ext):
-	written_file = 'written_' + ext + '.txt'
-	lex_file = 'lexicon_' + ext + '.pkl'
-	tokens = set()
-
-	with open(written_file, 'w') as f:
-		for word in embs:
-			tokens.add(word)
-			result = word + '\t'
-			emb = embs[word]
-			result += ' '.join([str(x) for x in emb])
-			result += '\n'
-			f.write(result)
-	print('Wrote embeddings to', written_file)
-
-	with open(lex_file, 'wb') as f:
-		pickle.dump(tokens, f)
-	print('Saved tokens in', lex_file)
-
-
 def main(args):
 	# params for data loader
 	max_len = 53
@@ -138,22 +116,16 @@ def main(args):
 
 
 if __name__ == '__main__':
-	# parser = argparse.ArgumentParser(description = '')
-	# parser.add_argument('-opt', '--option', type = str, default = 'word', help = 'embedding option: {\'word\', \'char\'}')
-	# parser.add_argument('-md', '--mode', type = str, default = 'w2v', help = 'mode of embedding: {\'w2v\', \'svd\'}')
-    #
-	# parser.add_argument('-dim', '--dim', type = int, default = 300, help = 'dimension of embeddings')
-	# parser.add_argument('-min', '--min_count', type = int, default = 5, help = 'min_count for word2vec; ignored if svd')
-	# parser.add_argument('-win', '--window', type = int, default = 5, help = 'window for word2vec; ignored if svd')
-	# parser.add_argument('-it', '--iter', type = int, default = 20, help = 'iterations for word2vec; ignored if svd')
-    #
-	# args = vars(parser.parse_args())
-	# print(args)
-    #
-	# main(args)
-	embs = pickle.load(open('svd_word_s300.pkl', 'rb'))
-	print('Loaded embeddings:', len(embs))
+	parser = argparse.ArgumentParser(description = '')
+	parser.add_argument('-opt', '--option', type = str, default = 'word', help = 'embedding option: {\'word\', \'char\'}')
+	parser.add_argument('-md', '--mode', type = str, default = 'w2v', help = 'mode of embedding: {\'w2v\', \'svd\'}')
 
-	option = 'word'
-	size = 300
-	write_embeddings(embs, 'svd_{0}_s{1}'.format(option, size))
+	parser.add_argument('-dim', '--dim', type = int, default = 300, help = 'dimension of embeddings')
+	parser.add_argument('-min', '--min_count', type = int, default = 5, help = 'min_count for word2vec; ignored if svd')
+	parser.add_argument('-win', '--window', type = int, default = 5, help = 'window for word2vec; ignored if svd')
+	parser.add_argument('-it', '--iter', type = int, default = 20, help = 'iterations for word2vec; ignored if svd')
+
+	args = vars(parser.parse_args())
+	print(args)
+
+	main(args)
