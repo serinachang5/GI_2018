@@ -33,6 +33,7 @@ def write_embeddings(embs, specs):
 		pickle.dump(tokens, f, protocol=2)
 	print('Saved tokens in', lex_file)
 
+
 def prep_seed_sets(loss, agg, sub, specs):
     loss = [tok.lower() for tok in loss]
     print(loss)
@@ -48,8 +49,7 @@ def prep_seed_sets(loss, agg, sub, specs):
 
 
 '''EVAL'''
-# TO DO: fix this function, write README for resources
-def eval_seeds(splex):
+def make_normalized(splex, specs):
     scores = np.array([x[1] for x in splex.items()])
     print('Scores:', scores.shape)  # expecting 20000 x 3
 
@@ -62,31 +62,36 @@ def eval_seeds(splex):
     sub_scaler = MinMaxScaler()
     sub_scaler.fit(by_class[2].reshape(-1,1))
 
+    normalized_splex = {}
+    for word,(loss_raw, agg_raw, sub_raw) in splex.items():
+        loss_scaled = loss_scaler.transform(loss_raw)[0][0]
+        agg_scaled = agg_scaler.transform(agg_raw)[0][0]
+        sub_scaled = sub_scaler.transform(sub_raw)[0][0]
+        normalized_splex[word] = (loss_scaled, agg_scaled, sub_scaled)
+
+    splex_file = 'splex_normalized_' + specs + '.pkl'
+    with open(splex_file, 'wb') as f:
+        pickle.dump(normalized_splex, f)
+    print('Saved normalized SPLex in', splex_file)
+
+
+def eval_seeds(splex):
     loss, agg, sub = pickle.load(open('seeds_hc_lower_p2.pkl', 'rb'))
     print('LOSS SEED SET')
     for word in loss:
         if word in splex:
             loss_i, agg_i, sub_i = splex[word]
-            loss_scaled = loss_scaler.transform(loss_i)[0][0]
-            agg_scaled = agg_scaler.transform(agg_i)[0][0]
-            sub_scaled = sub_scaler.transform(sub_i)[0][0]
-            print(word, round(loss_scaled, 4), round(agg_scaled, 4), round(sub_scaled, 4))
+            print(word, round(loss_i, 4), round(agg_i, 4), round(sub_i, 4))
     print('AGG SEED SET')
     for word in agg:
         if word in splex:
             loss_i, agg_i, sub_i = splex[word]
-            loss_scaled = loss_scaler.transform(loss_i)[0][0]
-            agg_scaled = agg_scaler.transform(agg_i)[0][0]
-            sub_scaled = sub_scaler.transform(sub_i)[0][0]
-            print(word, round(loss_scaled, 4), round(agg_scaled, 4), round(sub_scaled, 4))
+            print(word, round(loss_i, 4), round(agg_i, 4), round(sub_i, 4))
     print('SUBSTANCE SEED SET')
     for word in sub:
         if word in splex:
             loss_i, agg_i, sub_i = splex[word]
-            loss_scaled = loss_scaler.transform(loss_i)[0][0]
-            agg_scaled = agg_scaler.transform(agg_i)[0][0]
-            sub_scaled = sub_scaler.transform(sub_i)[0][0]
-            print(word, round(loss_scaled, 4), round(agg_scaled, 4), round(sub_scaled, 4))
+            print(word, round(loss_i, 4), round(agg_i, 4), round(sub_i, 4))
 
 
 if __name__ == '__main__':
@@ -97,6 +102,9 @@ if __name__ == '__main__':
     # loss, agg, sub = pickle.load(open('seeds_hc.pkl', 'rb'))
     # prep_seed_sets(loss, agg, sub, specs='hc')
 
-    splex = pickle.load(open('splex_svd_word_s300_seeds_hc.pkl', 'rb'), encoding='latin1')
-    print('Loaded splex:', len(splex))
-    eval_seeds(splex)
+    # raw_splex = pickle.load(open('splex_raw_svd_word_s300_seeds_hc.pkl', 'rb'), encoding='latin1')
+    # print('Loaded raw SPLex:', len(raw_splex))
+    # make_normalized(raw_splex, 'svd_word_s300_seeds_hc')
+
+    normalized_splex = pickle.load(open('splex_normalized_svd_word_s300_seeds_hc.pkl', 'rb'))
+    eval_seeds(normalized_splex)

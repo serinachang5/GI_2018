@@ -89,6 +89,19 @@ def get_ppmi(sentences):
 	return P, vocab
 
 
+def sample_usage():
+	test_indices = ['1','2','3']
+	wv = gensim.models.KeyedVectors.load_word2vec_format('w2v_word_s300_w5_mc5_it20.bin', binary=True)
+	for idx in test_indices:
+		if idx in wv.vocab:
+			print(wv[idx][:10])
+	test_words = ['hi','Gang','me']
+	svd_embs = pickle.load(open('svd_word_s300.pkl', 'rb'))
+	for word in test_words:
+		if word.lower() in svd_embs:
+			print(svd_embs[word.lower()][:10])
+
+
 def main(args):
 	# params for data loader
 	max_len = 53
@@ -129,3 +142,4 @@ if __name__ == '__main__':
 	print(args)
 
 	main(args)
+
