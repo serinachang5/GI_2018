@@ -7,6 +7,7 @@ Date: 04/22/2018
 Prepare embeddings for SENTPROP and evaluate resulting scores.
 """
 
+from sentence_tokenizer import int_array_rep, unicode_rep
 import numpy as np
 import pickle
 from sklearn.preprocessing import MinMaxScaler
@@ -35,18 +36,18 @@ def write_embeddings(embs, specs):
 
 
 def prep_seed_sets(loss, agg, sub, specs):
-    loss = [tok.lower() for tok in loss]
-    print(loss)
-    agg = [tok.lower() for tok in agg]
-    print(agg)
-    sub = [tok.lower() for tok in sub]
-    print(sub)
+    seeds = []
+    for group in [loss, agg, sub]:
+        group_as_idx = []
+        for word in group:
+            idx = int_array_rep(word)[0]
+            group_as_idx.append(str(idx))
+        seeds.append(group_as_idx)
 
-    seed_file = 'seeds_' + specs + '_lower_p2.pkl'  # lowercased and protocol 2
+    seed_file = 'seeds_' + specs + '_idx_p2.pkl'  # as idx and protocol 2
     with open(seed_file, 'wb') as f:
-        pickle.dump([loss, agg, sub], f, protocol=2)
+        pickle.dump(seeds, f, protocol=2)
     print('Saved seed sets in', seed_file)
-
 
 '''EVAL'''
 def make_normalized(splex, specs):
@@ -74,31 +75,68 @@ def make_normalized(splex, specs):
         pickle.dump(normalized_splex, f)
     print('Saved normalized SPLex in', splex_file)
 
-
-def eval_seeds(splex):
-    loss, agg, sub = pickle.load(open('seeds_hc_lower_p2.pkl', 'rb'))
+def eval_seeds(loss, agg, sub, splex):
     print('LOSS SEED SET')
-    for word in loss:
-        if word in splex:
-            loss_i, agg_i, sub_i = splex[word]
-            print(word, round(loss_i, 4), round(agg_i, 4), round(sub_i, 4))
+    for idx in loss:
+        if idx in splex:
+            loss_i, agg_i, sub_i = splex[idx]
+            word = unicode_rep([int(idx)])
+            print('{}, idx={}: loss={}, agg={}, sub={}'.format(
+                word, idx, round(loss_i, 4), round(agg_i, 4), round(sub_i, 4)))
+        else:
+            print('Missing {}, idx={}'.format(unicode_rep([int(idx)]), idx))
     print('AGG SEED SET')
-    for word in agg:
-        if word in splex:
-            loss_i, agg_i, sub_i = splex[word]
-            print(word, round(loss_i, 4), round(agg_i, 4), round(sub_i, 4))
+    for idx in agg:
+        if idx in splex:
+            loss_i, agg_i, sub_i = splex[idx]
+            word = unicode_rep([int(idx)])
+            print('{}, idx={}: loss={}, agg={}, sub={}'.format(
+                word, idx, round(loss_i, 4), round(agg_i, 4), round(sub_i, 4)))
+        else:
+            print('Missing {}, idx={}'.format(unicode_rep([int(idx)]), idx))
     print('SUBSTANCE SEED SET')
-    for word in sub:
-        if word in splex:
-            loss_i, agg_i, sub_i = splex[word]
-            print(word, round(loss_i, 4), round(agg_i, 4), round(sub_i, 4))
+    for idx in sub:
+        if idx in splex:
+            loss_i, agg_i, sub_i = splex[idx]
+            word = unicode_rep([int(idx)])
+            print('{}, idx={}: loss={}, agg={}, sub={}'.format(
+                word, idx, round(loss_i, 4), round(agg_i, 4), round(sub_i, 4)))
+        else:
+            print('Missing {}, idx={}'.format(unicode_rep([int(idx)]), idx))
 
+def eval_top_words(splex):
+    for idx in range(1,101):
+        loss_i, agg_i, sub_i = splex[str(idx)]
+        word = unicode_rep([idx])
+        print('{}, idx={}: loss={}, agg={}, sub={}'.format(
+            word, idx, round(loss_i, 4), round(agg_i, 4), round(sub_i, 4)))
+
+def sample_usage():
+    test_indices = [str(idx) for idx in range(10)]
+
+    raw_splex_file = 'splex_raw_svd_word_s300_seeds_hc.pkl'
+    raw_splex = pickle.load(open(raw_splex_file, 'rb'), encoding='latin1')
+    print('Number of embeddings in {}: {}'.format(raw_splex_file, len(raw_splex)))
+    for idx in test_indices:
+        if idx in raw_splex:
+            print(unicode_rep([int(idx)]), idx, raw_splex[idx])
+        else:
+            print('No embedding found for', unicode_rep([int(idx)]),  idx)
+
+    normed_splex_file = 'splex_normalized_svd_word_s300_seeds_hc.pkl'
+    normed_splex = pickle.load(open(normed_splex_file, 'rb'))
+    print('Number of embeddings in {}: {}'.format(normed_splex_file, len(normed_splex)))
+    for idx in test_indices:
+        if idx in normed_splex:
+            print(unicode_rep([int(idx)]), idx, normed_splex[idx])
+        else:
+            print('No embedding found for', unicode_rep([int(idx)]),  idx)
 
 if __name__ == '__main__':
     # embs = pickle.load(open('svd_word_s300.pkl', 'rb'))
     # print('Loaded embeddings:', len(embs))
     # write_embeddings(embs, specs='svd_word_s300')
-    #
+
     # loss, agg, sub = pickle.load(open('seeds_hc.pkl', 'rb'))
     # prep_seed_sets(loss, agg, sub, specs='hc')
 
@@ -106,5 +144,9 @@ if __name__ == '__main__':
     # print('Loaded raw SPLex:', len(raw_splex))
     # make_normalized(raw_splex, 'svd_word_s300_seeds_hc')
 
-    normalized_splex = pickle.load(open('splex_normalized_svd_word_s300_seeds_hc.pkl', 'rb'))
-    eval_seeds(normalized_splex)
+    # normalized_splex = pickle.load(open('splex_normalized_svd_word_s300_seeds_hc.pkl', 'rb'))
+    # loss, agg, sub = pickle.load(open('seeds_hc_idx_p2.pkl', 'rb'))
+    # eval_seeds(loss, agg, sub, normalized_splex)
+    # eval_top_words(normalized_splex)
+
+    sample_usage()

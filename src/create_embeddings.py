@@ -12,6 +12,7 @@ from data_loader import Data_loader
 import gensim
 import pickle
 import numpy as np
+from sentence_tokenizer import unicode_rep
 from sklearn.feature_extraction.text import CountVectorizer
 
 
@@ -25,12 +26,16 @@ def generate_w2v_embs(sentences, option):
 	print('Training Word2Vec...')
 	model = gensim.models.Word2Vec(sentences, size=size, window=window,
 								   min_count=min_count, iter=iter)
-	print('Finished. Vocab size:', len(model.wv.vocab))
+	wv = model.wv
+	print('Finished. Vocab size:', len(wv.vocab))
+	vocab = list(sorted([w for w in wv.vocab], key=lambda x: int(x)))  # sort by idx
+	print('First 10 words in vocab:', vocab[:10])
+	print('Last 10 words in vocab:', vocab[-10:])
 
 	# save the model (as binary)
 	out_file = 'w2v_{0}_s{1}_w{2}_mc{3}_it{4}.bin'.format(option, size, window,
 														  min_count, iter)
-	model.wv.save_word2vec_format(out_file, binary=True)
+	wv.save_word2vec_format(out_file, binary=True)
 	print('Word2Vec model saved to', out_file)
 
 
@@ -60,18 +65,19 @@ def generate_svd_embs(sentences, option):
 
 
 def get_ppmi(sentences):
-	count_model = CountVectorizer(lowercase=True, max_features=20000)
+	vocab = [str(idx) for idx in range(1,20001)]
+	count_model = CountVectorizer(vocabulary=vocab)  # get top 20k indices
 	counts = count_model.fit_transform(sentences)
 	counts.data = np.fmin(np.ones(counts.data.shape), counts.data)  # want occurence, not count
 	n,v = counts.shape  # n is num of docs, v is vocab size
 	print('n = {}, v = {}'.format(n,v))
-	vocab = sorted(count_model.vocabulary_.items(), key=lambda x: x[1])  # sort by idx
-	vocab = [x[0] for x in vocab]
+	vocab = list(sorted([w for w in count_model.vocabulary_], key=lambda x: int(x)))  # sort by idx
 	print('First 10 words in vocab:', vocab[:10])
+	print('Last 10 words in vocab:', vocab[-10:])
 
 	coo = (counts.T).dot(counts)  # co-occurence matrix is v by v
 	coo.setdiag(0)  # set same-word to 0
-	coo = coo + np.full(coo.shape, .0001)  # smoothing
+	coo = coo + np.full(coo.shape, .01)  # smoothing
 
 	marginalized = coo.sum(axis=0)  # smoothed num of coo per word
 	prob_norm = coo.sum()  # smoothed sum of all coo
@@ -89,17 +95,24 @@ def get_ppmi(sentences):
 	return P, vocab
 
 
-def sample_usage():
-	test_indices = ['1','2','3']
-	wv = gensim.models.KeyedVectors.load_word2vec_format('w2v_word_s300_w5_mc5_it20.bin', binary=True)
+def sample_usage(w2v_file, svd_file):
+	test_indices = [str(idx) for idx in range(10)]
+
+	wv = gensim.models.KeyedVectors.load_word2vec_format(w2v_file, binary=True)
+	print('Number of embeddings in {}: {}'.format(w2v_file, len(wv.vocab)))
 	for idx in test_indices:
 		if idx in wv.vocab:
-			print(wv[idx][:10])
-	test_words = ['hi','Gang','me']
-	svd_embs = pickle.load(open('svd_word_s300.pkl', 'rb'))
-	for word in test_words:
-		if word.lower() in svd_embs:
-			print(svd_embs[word.lower()][:10])
+			print(unicode_rep([int(idx)]), idx, wv[idx][:10])
+		else:
+			print('No embedding found for', unicode_rep([int(idx)]),  idx)
+
+	svd_embs = pickle.load(open(svd_file, 'rb'))
+	print('Number of embeddings in {}: {}'.format(svd_file, len(svd_embs)))
+	for idx in test_indices:
+		if idx in svd_embs:
+			print(unicode_rep([int(idx)]), idx, svd_embs[idx][:10])
+		else:
+			print('No embedding found for', unicode_rep([int(idx)]), idx)
 
 
 def main(args):
@@ -116,14 +129,15 @@ def main(args):
 	if mode == 'w2v':
 		sentences = []
 		for tweet in dl.all_data():
-			# need in index form
+			# need indices split
 			sentences.append([str(x) for x in tweet['int_arr']])
+		print('Check sentence0:', sentences[0])
 		generate_w2v_embs(sentences, option)
 	else:
 		sentences = []
 		for tweet in dl.all_data():
-			# need in unicode form
-			sentences.append(dl.convert2unicode(tweet['int_arr']))
+			# need indices joined
+			sentences.append(' '.join([str(x) for x in tweet['int_arr']]))
 		print('Check sentence0:', sentences[0])
 		generate_svd_embs(sentences, option)
 
@@ -141,5 +155,10 @@ if __name__ == '__main__':
 	args = vars(parser.parse_args())
 	print(args)
 
-	main(args)
+	# main(args)
+
+	w2v_file = 'w2v_word_s300_w5_mc5_it20.bin'
+	svd_file = 'svd_word_s300.pkl'
+	sample_usage(w2v_file, svd_file)
+
 
