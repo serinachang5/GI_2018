@@ -72,6 +72,9 @@ def to_char_array(s):
         if isemoji(token):
             char_array.append(token)
             continue
+        if token in ['url' or '@user']:
+            char_array.append(token)
+            continue
         for c in token:
             char_array.append(c)
     return char_array[1:]
@@ -125,7 +128,7 @@ def tokenize(s):
     return tokens_re.findall(s)
 
 # preprocess a raw string and returns its utf-8 representation
-def preprocess(s, debug=False):
+def preprocess(s, lower=True, debug=False):
 
     # assert type of the input: must be a unicode string
     if type(s) != str:
@@ -144,7 +147,8 @@ def preprocess(s, debug=False):
     # replace ::emoji:: with empty string
     s = re.sub('::emoji::', '', s)
     tokens = tokenize(s)
-    tokens = [token.lower() for token in tokens]
+    if lower:
+        tokens = [token.lower() for token in tokens]
 
     html_regex = re.compile('<[^>]+>')
     tokens = [token for token in tokens if not html_regex.match(token)]
@@ -180,7 +184,7 @@ def preprocess(s, debug=False):
 # a test case
 if __name__ == '__main__':
     # s = 'FREE 🔓🔓 BRO @ReesemoneySODMG Shit is FU 😤😤👿 .....👮🏽👮🏽💥💥💥🔫'
-    # s = 'RT @Ebkfoee: 🔥🔥🔥🔥🔥 @Ebkfoe_ https://t.co/xWzNGMduby'
+    s = 'RT @Ebkfoee: 🔥🔥🔥🔥🔥 @Ebkfoe_ https://t.co/xWzNGMduby'
     binary_str = preprocess(s, debug=True)
     print(to_char_array(binary_str))
     print(extract_mentioned_user_name(s))

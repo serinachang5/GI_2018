@@ -39,7 +39,10 @@ def int_array_rep(s, option='word', vocab_count=50000, debug=False):
     if debug:
         print('tokenization at level: %s.' % option)
 
-    utf8encode = preprocess(s)
+    if option == 'word':
+        utf8encode = preprocess(s)
+    else:
+        utf8encode = preprocess(s, lower=False)
     result = []
     if option == 'word':
         for token in utf8encode.split(b' '):

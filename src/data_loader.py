@@ -141,8 +141,9 @@ class Data_loader:
         record['int_arr'] = record[self.option + '_int_arr']
         del record['word_int_arr']
         del record['char_int_arr']
-        record['int_arr'] = self.pad_int_arr(record['int_arr'])
+        record['padded_int_arr'] = self.pad_int_arr(record['int_arr'][:])
         self.trim2vocab_size(record['int_arr'])
+        self.trim2vocab_size(record['padded_int_arr'])
 
     def pad_int_arr(self, int_arr):
         int_arr += [0] * self.max_len
@@ -157,7 +158,7 @@ class Data_loader:
         return [self.data['data'][idx] for idx in idxes]
 
 if __name__ == '__main__':
-    dl = Data_loader(vocab_size=40000, max_len=50, option='word')
+    dl = Data_loader(vocab_size=40000, max_len=150, option='char')
     fold_idx = 0
     tr, val, test = dl.cv_data(fold_idx)
     for idx in range(10):

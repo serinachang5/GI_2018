@@ -33,7 +33,7 @@ def count_occurrence(corpus_dirs):
 
             # preprocess the text
             text_bytes = preprocess(str(text))
-            char_array = to_char_array(text_bytes)
+            char_array = to_char_array(preprocess(str(text), lower=False))
 
             # count the occurence of words
             for word in text_bytes.split(b' '):
@@ -192,11 +192,13 @@ def create_vocab(labeled_corpuses, unlabeled_corpuses, word_file_dir, char_file_
     del user2property[b'_UNKNOWN_']
 
     with open(word_file_dir, 'wb') as out_word_file:
-        pkl.dump(word2property, out_word_file)
+       pkl.dump(word2property, out_word_file)
 
     with open(char_file_dir, 'wb') as out_char_file:
         pkl.dump(char2property, out_char_file)
 
+    if '' in user2property:
+        del user2property['']
     with open(user_file_dir, 'wb') as out_user_file:
         pkl.dump(user2property, out_user_file)
 
