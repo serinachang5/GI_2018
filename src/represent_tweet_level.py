@@ -1,26 +1,38 @@
-import gensim
+from gensim.models import KeyedVectors, Doc2Vec
 import numpy as np
 import pickle
 
 class TweetLevel:
-    def __init__(self, embs, emb_type = 'pkl'):
-        assert(emb_type == 'pkl' or emb_type == 'w2v' or emb_type == 'direct')
-        if emb_type == 'pkl':
-            idx2emb = pickle.load(open(embs, 'rb'))
-            print('Number of embeddings in {}: {}'.format(embs, len(idx2emb)))
+    def __init__(self, wl_embs, wl_type = 'pkl', d2v_model = None):
+        assert(wl_type == 'pkl' or wl_type == 'w2v' or wl_type == 'direct')
+        if wl_type == 'pkl':
+            idx2emb = pickle.load(open(wl_embs, 'rb'))
+            print('Number of embeddings in {}: {}'.format(wl_embs, len(idx2emb)))
             self.idx2emb = idx2emb
-        elif emb_type == 'w2v':
-            wv = gensim.models.KeyedVectors.load_word2vec_format(embs, binary=True)
-            print('Number of embeddings in {}: {}'.format(embs, len(wv.vocab)))
+        elif wl_type == 'w2v':
+            wv = KeyedVectors.load_word2vec_format(wl_embs, binary=True)
+            print('Number of embeddings in {}: {}'.format(wl_embs, len(wv.vocab)))
             self.idx2emb = dict((idx, wv.vocab[idx]) for idx in wv.vocab)
         else:  # direct
-            self.idx2emb = embs
+            print('Number of embeddings provided:', len(wl_embs))
+            self.idx2emb = wl_embs
+
+        if d2v_model is not None:
+            self.d2v_model = Doc2Vec.load(d2v_model)
+        else:
+            self.d2v_model = None
 
     def get_representation(self, seq, mode = 'avg'):
+        valid_modes = ['avg', 'sum', 'max', 'min', 'd2v']
+        assert(mode in valid_modes)
+
         if len(seq) == 0:
             return 0
         if type(seq[0]) is int:
             seq = [str(idx) for idx in seq]
+
+        if mode == 'd2v':
+            return self._get_docvec(seq)
 
         found_embeddings = []
         for idx in seq:
@@ -29,18 +41,20 @@ class TweetLevel:
         if len(found_embeddings) == 0:
             return 0
 
-        valid_modes = ['avg', 'sum', 'max', 'min', 'para']
-        assert(mode in valid_modes)
         if mode == 'avg':
             return self._get_average(found_embeddings)
         elif mode == 'sum':
             return self._get_sum(found_embeddings)
         elif mode == 'max':
             return self._get_max(found_embeddings)
-        elif mode == 'min':
+        else:  # mode == 'min'
             return self._get_min(found_embeddings)
-        else:  # mode == 'para'
-            return self._get_average(found_embeddings)
+
+    # inferred document embedding from doc2vec model
+    def _get_docvec(self, seq):
+        if self.d2v_model is None:
+            print('No d2v_model; cannot get docvec')
+        return self.d2v_model.infer_vector(seq)
 
     # average of all embeddings
     def _get_average(self, elist):
@@ -64,10 +78,11 @@ class TweetLevel:
         min_per_dim = np.min(embs_by_dim, axis=1)
         return min_per_dim
 
+def generate_doc2vec:
 
 if __name__ == '__main__':
     example_dict = {'1':[1,3,1], '2':[2,2,2]}
-    tl = TweetLevel(example_dict, emb_type='direct')
+    tl = TweetLevel(example_dict, wl_type='direct', d2v_model = 'd2v_word_s300_w5_mc1_it20.mdl')
     print(tl.idx2emb)
     seq = [1,2,2]
     for mode in ['avg', 'sum', 'max', 'min']:
