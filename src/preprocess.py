@@ -31,12 +31,13 @@ def extract_mentioned_user_name(s):
     s = str(s)
     if len(s) <= 2:
         return set()
-    if s[:2] == 'RT':
-        return set()
     tokens = s.split(' ')
     mentioned_users = set()
-    for token in tokens:
+    for i, token in enumerate(tokens):
         if len(token) > 2 and token[0] == '@':
+            # Confirm previous token is not 'RT', as that would be a retweet
+            if i <= 1 and tokens[i-1] == 'RT':
+                continue
             mentioned_user = token[1:]
             mentioned_users.add(mentioned_user.lower())
     return mentioned_users
