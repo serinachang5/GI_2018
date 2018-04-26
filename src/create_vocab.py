@@ -191,11 +191,13 @@ def create_vocab(labeled_corpuses, unlabeled_corpuses, word_file_dir, char_file_
     user2property['UNKNOWN_USER'] = user2property[b'_UNKNOWN_']
     del user2property[b'_UNKNOWN_']
 
+    '''
     with open(word_file_dir, 'wb') as out_word_file:
        pkl.dump(word2property, out_word_file)
 
     with open(char_file_dir, 'wb') as out_char_file:
         pkl.dump(char2property, out_char_file)
+    '''
 
     if '' in user2property:
         del user2property['']

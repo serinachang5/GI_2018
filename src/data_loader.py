@@ -17,7 +17,7 @@ class Data_loader:
     each datapoint/tweet is a dictionary
     """
 
-    def __init__(self, vocab_size=40000, max_len=50, option='word', verbose=True):
+    def __init__(self, vocab_size=40000, max_len=50, option='word', verbose=True, load_tweet=True):
         """
         Parameters
         ----------
@@ -41,13 +41,16 @@ class Data_loader:
                                   for c in self.token2property])
         if verbose:
             print('%d vocab is considered.' % min(len(self.id2token), self.vocab_size))
-
+        
+        '''
         # loading user information
         self.user2property = pkl.load(open('../model/user.pkl', 'rb'))
         self.id2user = dict([(self.user2property[user_name]['id'], user_name) for user_name in self.user2property])
         if verbose:
             print('Loading user information finished')
-
+        '''
+        if not load_tweet:
+            return
         # loading tweet level data
         if verbose:
             print('Loading tweets ...')
@@ -98,7 +101,7 @@ class Data_loader:
     # tokenize a string and convert it to int representation given the parameters of this data loader
     def convert2int_arr(self, s):
         int_arr = int_array_rep(str(s), option=self.option, vocab_count=self.vocab_size)
-        int_arr = self.pad_int_arr(int_arr)
+        # int_arr = self.pad_int_arr(int_arr)
         return int_arr
 
     def tweets_by_user(self, user_id):
@@ -125,10 +128,12 @@ class Data_loader:
     def print_recovered_tweet(self, tweet_property):
         for key in tweet_property:
             print("%s: %s" % (key, tweet_property[key]))
+        '''
         print('User %s posted the tweet.' % self.id2user[tweet_property['user_post']])
         print('Users being mentioned: ' + ', '.join([self.id2user[user_id] for user_id in tweet_property['user_mentions']]))
         if tweet_property.get('user_retweet') is not None:
             print('Retweet from %s.' % self.id2user[tweet_property['user_retweet']])
+        '''
         print('original tweet content: ' + self.convert2unicode(tweet_property['int_arr']))
 
     # get the user name of an id
@@ -157,8 +162,14 @@ class Data_loader:
     def get_records_by_idxes(self, idxes):
         return [self.data['data'][idx] for idx in idxes]
 
+    def __getitem__(self, tweet_id):
+        return self.data['data'][tweet_id]
+
 if __name__ == '__main__':
-    dl = Data_loader(vocab_size=40000, max_len=150, option='char')
+    dl = Data_loader(vocab_size=40000, max_len=150, option='word', load_tweet=False)
+    print(dl.convert2int_arr('fake niggas get extorted 💯'))
+    exit(0)
+    dl = Data_loader(vocab_size=40000, max_len=150, option='word')
     fold_idx = 0
     tr, val, test = dl.cv_data(fold_idx)
     for idx in range(10):
@@ -169,3 +180,5 @@ if __name__ == '__main__':
     for idx in range(10):
         print('-------------')
         dl.print_recovered_tweet(user_tweets[idx])
+
+    print(dl[423325236696580096])
