@@ -11,8 +11,8 @@ import argparse
 from data_loader import Data_loader
 from gensim.models import Word2Vec, KeyedVectors, Doc2Vec
 from gensim.models.doc2vec import TaggedDocument
-import pickle
 import numpy as np
+import pickle
 from sentence_tokenizer import unicode_rep
 from sklearn.feature_extraction.text import CountVectorizer
 
@@ -20,13 +20,13 @@ from sklearn.feature_extraction.text import CountVectorizer
 # Train on tweets in index form
 def generate_w2v_embs(sentences, option):
 	size = args['dim']
-	min_count = args['min_count']
 	window = args['window']
-	iter = args['iter']
+	min_count = args['min_count']
+	epochs = args['epochs']
 
 	print('Training Word2Vec...')
 	model = Word2Vec(sentences, size=size, window=window,
-					 min_count=min_count, iter=iter)
+					 min_count=min_count, iter=epochs)
 	wv = model.wv
 	print('Finished. Vocab size:', len(wv.vocab))
 	vocab = list(sorted([w for w in wv.vocab], key=lambda x: int(x)))  # sort by idx
@@ -34,8 +34,8 @@ def generate_w2v_embs(sentences, option):
 	print('Last 10 words in vocab:', vocab[-10:])
 
 	# save word vectors (as binary)
-	out_file = 'w2v_{0}_s{1}_w{2}_mc{3}_it{4}.bin'.format(option, size, window,
-														  min_count, iter)
+	out_file = 'w2v_{0}_s{1}_w{2}_mc{3}_ep{4}.bin'.format(option, size, window,
+														  min_count, epochs)
 	wv.save_word2vec_format(out_file, binary=True)
 	print('Word2Vec vectors saved to', out_file)
 
@@ -95,25 +95,26 @@ def get_ppmi(sentences):
 
 def generate_d2v_embs(sentences, tags, option):
 	size = args['dim']
-	min_count = args['min_count']
 	window = args['window']
-	iter = args['iter']
+	min_count = args['min_count']
+	epochs = args['epochs']
 
 	docs = []
 	for s,t in zip(sentences, tags):
 		docs.append(TaggedDocument(s,t))
 
-	print('Training Doc2Vec...')
+	print('Initializing Doc2Vec')
 	model = Doc2Vec(documents=docs, dm=1,
 					size=size, window=window,
 					min_count=min_count)
-	model.train(docs, total_examples=len(docs), epochs=iter)
-	print('Finished. Number of docs trained:', len(model.docvecs))
+	print('Training Doc2Vec on', len(docs), 'examples...')
+	model.train(docs, total_examples=len(docs), epochs=epochs)
+	print('Finished training.')
 	model.delete_temporary_training_data(keep_doctags_vectors=True, keep_inference=True)
 
 	# need to save the whole model to keep
-	out_file = 'd2v_{0}_s{1}_w{2}_mc{3}_it{4}.mdl'.format(option, size, window,
-														  	  min_count, iter)
+	out_file = 'd2v_{0}_s{1}_w{2}_mc{3}_ep{4}.mdl'.format(option, size, window,
+														  	  min_count, epochs)
 	model.save(out_file)
 	print('Doc2Vec model saved to', out_file)
 
@@ -159,7 +160,6 @@ def main(args):
 	max_len = 53
 	vocab_size = 30000
 	option = args['option']
-
 	print('Initializing Data Loader')
 	dl = Data_loader(vocab_size=vocab_size, max_len=max_len, option=option)
 
@@ -185,10 +185,10 @@ def main(args):
 		for tweet in dl.all_data():
 			# need indices split and use id's as tags
 			sentences.append([str(x) for x in tweet['int_arr']])
-			tags.append([tweet['tweet_id']])
-		print('Check first sentences:', sentences[:3])
-		print('Check first tags:', tags[:3])
-		generate_d2v_embs(sentences[:100], tags[:100], option)
+			tags.append([str(tweet['tweet_id'])])
+		print('Check sentence0:', sentences[0])
+		print('Check tag0:', tags[0])
+		generate_d2v_embs(sentences, tags, option)
 
 
 if __name__ == '__main__':
@@ -197,14 +197,14 @@ if __name__ == '__main__':
 	parser.add_argument('-md', '--mode', type = str, default = 'w2v', help = 'mode of embedding: {\'w2v\', \'svd\'}')
 
 	parser.add_argument('-dim', '--dim', type = int, default = 300, help = 'dimension of embeddings')
-	parser.add_argument('-mc', '--min_count', type = int, default = 5, help = 'min_count for word2vec; ignored if svd')
 	parser.add_argument('-w', '--window', type = int, default = 5, help = 'window for word2vec; ignored if svd')
-	parser.add_argument('-it', '--iter', type = int, default = 20, help = 'iterations for word2vec; ignored if svd')
+	parser.add_argument('-mc', '--min_count', type = int, default = 5, help = 'min_count for word2vec; ignored if svd')
+	parser.add_argument('-ep', '--epochs', type = int, default = 20, help = 'iterations for word2vec; ignored if svd')
 
 	args = vars(parser.parse_args())
 	print(args)
 
-	# main(args)
+	main(args)
 
 	# w2v_file = 'w2v_word_s300_w5_mc5_it20.bin'
 	# svd_file = 'svd_word_s300.pkl'
@@ -215,7 +215,7 @@ if __name__ == '__main__':
 	# 			  ['6', '132', '130', '11646', '47', '6', '25', '4', '132', '130', '3934', '73', '12', '163', '3035', '545', '221', '545']]
 	# test_tags = [['740043438788345856'], ['258662084089368576'], ['842801723001487360']]
 	# generate_d2v_embs(test_sents, test_tags, 'word')
-	d2v_file = 'd2v_word_s300_w5_mc1_it20.mdl'
-	sample_usage(d2v_file, mode='d2v')
+	# d2v_file = 'd2v_word_s300_w5_mc1_it20.mdl'
+	# sample_usage(d2v_file, mode='d2v')
 
 

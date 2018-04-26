@@ -3,21 +3,21 @@
 sentprop_support
 ===================
 Authors: Serina Chang
-Date: 04/22/2018
-Prepare embeddings for SENTPROP and evaluate resulting scores.
+Date: 04/26/2018
+Prepare embeddings for SENTPROP algorithm. Post-process and evaluate resulting scores.
 """
 
 from sentence_tokenizer import int_array_rep, unicode_rep
 import numpy as np
 import pickle
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 
 '''SET-UP'''
-# protocol 2 because SENTPROP is in Python 2
+# pickle in protocol 2 because SENTPROP is in Python 2
 def write_embeddings(embs, specs):
 	written_file = 'written_' + specs + '.txt'
-	lex_file = 'lexicon_' + specs + '_p2.pkl'  # protocol 2
+	lex_file = 'lexicon_' + specs + '_p2.pkl'
 	tokens = set()
 
 	with open(written_file, 'w') as f:
@@ -44,36 +44,33 @@ def prep_seed_sets(loss, agg, sub, specs):
             group_as_idx.append(str(idx))
         seeds.append(group_as_idx)
 
-    seed_file = 'seeds_' + specs + '_idx_p2.pkl'  # as idx and protocol 2
+    seed_file = 'seeds_' + specs + '_idx_p2.pkl'
     with open(seed_file, 'wb') as f:
         pickle.dump(seeds, f, protocol=2)
     print('Saved seed sets in', seed_file)
 
+
 '''EVAL'''
-def make_normalized(splex, specs):
-    scores = np.array([x[1] for x in splex.items()])
-    print('Scores:', scores.shape)  # expecting 20000 x 3
+def save_scaled(splex, specs, scale_type='minmax'):
+    sorted_splex = sorted(splex.items(), key=lambda x:int(x[0]))
+    indices = [x[0] for x in sorted_splex]
+    scores = np.array([x[1] for x in sorted_splex])
 
-    # normalize scores across class to (0,1) range
-    by_class = scores.T
-    loss_scaler = MinMaxScaler()
-    loss_scaler.fit(by_class[0].reshape(-1,1))
-    agg_scaler = MinMaxScaler()
-    agg_scaler.fit(by_class[1].reshape(-1,1))
-    sub_scaler = MinMaxScaler()
-    sub_scaler.fit(by_class[2].reshape(-1,1))
-
-    normalized_splex = {}
-    for word,(loss_raw, agg_raw, sub_raw) in splex.items():
-        loss_scaled = loss_scaler.transform(loss_raw)[0][0]
-        agg_scaled = agg_scaler.transform(agg_raw)[0][0]
-        sub_scaled = sub_scaler.transform(sub_raw)[0][0]
-        normalized_splex[word] = (loss_scaled, agg_scaled, sub_scaled)
-
-    splex_file = 'splex_normalized_' + specs + '.pkl'
-    with open(splex_file, 'wb') as f:
-        pickle.dump(normalized_splex, f)
-    print('Saved normalized SPLex in', splex_file)
+    assert(scale_type == 'minmax' or scale_type == 'standard')
+    if scale_type == 'minmax': # per feature, subtract min and divide by range -> (0,1) range
+        scaled_scores = MinMaxScaler().fit_transform(scores)
+        scaled_splex = dict((indices[i], scaled_scores[i]) for i in range(len(indices)))
+        splex_file = 'splex_' + scale_type + '_' + specs + '.pkl'
+        with open(splex_file, 'wb') as f:
+            pickle.dump(scaled_splex, f)
+        print('Saved scaled splex in', splex_file)
+    else: # per feature, scale mean to 0 and variance to 1
+        scaled_scores = StandardScaler().fit_transform(scores)
+        scaled_splex = dict((indices[i], scaled_scores[i]) for i in range(len(indices)))
+        splex_file = 'splex_' + scale_type + '_' + specs + '.pkl'
+        with open(splex_file, 'wb') as f:
+            pickle.dump(scaled_splex, f)
+        print('Saved scaled splex in', splex_file)
 
 def eval_seeds(loss, agg, sub, splex):
     print('LOSS SEED SET')
@@ -105,6 +102,7 @@ def eval_seeds(loss, agg, sub, splex):
             print('Missing {}, idx={}'.format(unicode_rep([int(idx)]), idx))
 
 def eval_top_words(splex):
+    print('TOP 100 WORDS')
     for idx in range(1,101):
         loss_i, agg_i, sub_i = splex[str(idx)]
         word = unicode_rep([idx])
@@ -123,14 +121,16 @@ def sample_usage():
         else:
             print('No embedding found for', unicode_rep([int(idx)]),  idx)
 
-    normed_splex_file = 'splex_normalized_svd_word_s300_seeds_hc.pkl'
-    normed_splex = pickle.load(open(normed_splex_file, 'rb'))
-    print('Number of embeddings in {}: {}'.format(normed_splex_file, len(normed_splex)))
+    # same usage for splex_minmax and splex_standard
+    scaled_splex_file = 'splex_minmax_svd_word_s300_seeds_hc.pkl'
+    scaled_splex = pickle.load(open(scaled_splex_file, 'rb'))
+    print('Number of embeddings in {}: {}'.format(scaled_splex_file, len(scaled_splex)))
     for idx in test_indices:
-        if idx in normed_splex:
-            print(unicode_rep([int(idx)]), idx, normed_splex[idx])
+        if idx in scaled_splex:
+            print(unicode_rep([int(idx)]), idx, scaled_splex[idx])
         else:
             print('No embedding found for', unicode_rep([int(idx)]),  idx)
+
 
 if __name__ == '__main__':
     # embs = pickle.load(open('svd_word_s300.pkl', 'rb'))
@@ -142,11 +142,11 @@ if __name__ == '__main__':
 
     # raw_splex = pickle.load(open('splex_raw_svd_word_s300_seeds_hc.pkl', 'rb'), encoding='latin1')
     # print('Loaded raw SPLex:', len(raw_splex))
-    # make_normalized(raw_splex, 'svd_word_s300_seeds_hc')
+    # save_scaled(raw_splex, specs='svd_word_s300_seeds_hc', scale_type='standard')
 
-    # normalized_splex = pickle.load(open('splex_normalized_svd_word_s300_seeds_hc.pkl', 'rb'))
-    # loss, agg, sub = pickle.load(open('seeds_hc_idx_p2.pkl', 'rb'))
-    # eval_seeds(loss, agg, sub, normalized_splex)
-    # eval_top_words(normalized_splex)
+    splex = pickle.load(open('splex_standard_svd_word_s300_seeds_hc.pkl', 'rb'))
+    loss, agg, sub = pickle.load(open('seeds_hc_idx_p2.pkl', 'rb'))
+    eval_seeds(loss, agg, sub, splex)
+    eval_top_words(splex)
 
-    sample_usage()
+    # sample_usage()
