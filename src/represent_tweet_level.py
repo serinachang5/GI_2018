@@ -7,14 +7,18 @@ Date: 04/25/2018
 Generate and write tweet-level embeddings to file.
 """
 
+from collections import Counter
 from data_loader import Data_loader
 from gensim.models import KeyedVectors, Doc2Vec
+from imblearn.over_sampling import SMOTE
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np
 import pickle
 from sklearn.manifold import TSNE
-from sklearn.preprocessing import scale
+from sklearn.metrics import f1_score
+from sklearn.svm import LinearSVC
+
 
 class TweetLevel:
     def __init__(self, word_level = None, wl_file_type = None, d2v_model = None):
@@ -225,21 +229,90 @@ def visualize_reps(labeled_tweets, emb_type, rep_mode = None, include_sub = Fals
 
     plt.show()
 
-
-if __name__ == '__main__':
-    # modes = ['max', 'min']
-    # write_reps_to_file(emb_type='w2v', rep_modes=modes)
-    # write_reps_to_file(emb_type='splex', rep_modes=modes)
-    # check_written_embeddings(emb_type='splex', rep_mode='avg')
+def prelim_experiments(reps, tuning=True, oversample=False, include_weights=False):
     max_len = 53
     vocab_size = 30000
     option = 'word'
     print('Initializing Data Loader')
     dl = Data_loader(vocab_size=vocab_size, max_len=max_len, option=option)
 
-    tr, val, tst = dl.cv_data(fold_idx=0)
-    labeled_tweets = tr + val + tst
-    labeled_tweets = [(x['tweet_id'], x['label']) for x in labeled_tweets]
-    print('Number of labeled tweets:', len(labeled_tweets))
+    tls = []
+    modes = []
+    for emb_type, rep_mode in reps:
+        assert(emb_type == 'w2v' or emb_type == 'splex' or emb_type == 'd2v')
+        if emb_type == 'w2v':
+            assert(rep_mode is not None)
+            tls.append(TweetLevel(word_level='w2v_word_s300_w5_mc5_it20.bin', wl_file_type='w2v'))
+            modes.append(rep_mode)
+        elif emb_type == 'splex':
+            assert(rep_mode is not None)
+            tls.append(TweetLevel(word_level='splex_standard_svd_word_s300_seeds_hc.pkl', wl_file_type='pkl'))
+            modes.append(rep_mode)
+        else:
+            tls.append(TweetLevel(d2v_model='d2v_word_s300_w5_mc5_ep20.mdl'))
+            modes.append('d2v')
 
-    visualize_reps(labeled_tweets, emb_type='w2v', rep_mode='avg')
+    tr, val, test = dl.cv_data(fold_idx=0)
+    X_tr, y_tr = get_vecs(tr, tls, modes)
+    if tuning:
+        X_test, y_test = get_vecs(val, tls, modes)
+    else:
+        X_val, y_val = get_vecs(val, tls, modes)
+        X_tr = np.concatenate((X_tr, X_val), axis=0)
+        y_tr = np.concatenate((y_tr, y_val), axis=0)
+        X_test, y_test = get_vecs(test, tls, modes)
+
+    print('Transformed data into:', X_tr.shape, y_tr.shape, X_test.shape, y_test.shape)
+    print('Distributions:', Counter(y_tr), Counter(y_test))
+    print('First X_tr entries')
+    print(X_tr[:5])
+
+    if oversample:
+        X_tr, y_tr = SMOTE().fit_sample(X_tr, y_tr)
+        print('Oversampling data. New training distribution:', Counter(y_tr))
+
+    if include_weights:
+        clf = LinearSVC(class_weight={0:.35, 1:.5, 2:.15})
+    else:
+        clf = LinearSVC()
+
+    print('Training SVM...')
+    clf.fit(X_tr, y_tr)
+    print('Macro-F1:')
+    pred = clf.predict(X_test)
+    print(f1_score(y_test, pred, average=None))  # per-class
+    print(f1_score(y_test, pred, average='macro'))
+
+def get_vecs(data, tls, modes):
+    X = []
+    y = []
+    label_to_idx = {'Loss':0, 'Aggression':1, 'Other':2}
+    for sample in data:
+        feats = []
+        for tl, mode in zip(tls, modes):
+            feats = np.concatenate((feats, tl.get_representation(sample['tweet_id'], mode=mode)), axis=0)
+        X.append(feats)
+        y.append(label_to_idx[sample['label']])
+    X = np.array(X)
+    y = np.array(y)
+    return X, y
+
+if __name__ == '__main__':
+    # modes = ['max', 'min']
+    # write_reps_to_file(emb_type='w2v', rep_modes=modes)
+    # write_reps_to_file(emb_type='splex', rep_modes=modes)
+    # check_written_embeddings(emb_type='splex', rep_mode='avg')
+    # max_len = 53
+    # vocab_size = 30000
+    # option = 'word'
+    # print('Initializing Data Loader')
+    # dl = Data_loader(vocab_size=vocab_size, max_len=max_len, option=option)
+    #
+    # tr, val, tst = dl.cv_data(fold_idx=0)
+    # labeled_tweets = tr + val + tst
+    # labeled_tweets = [(x['tweet_id'], x['label']) for x in labeled_tweets]
+    # print('Number of labeled tweets:', len(labeled_tweets))
+    #
+    # visualize_reps(labeled_tweets, emb_type='d2v')
+
+    prelim_experiments(reps=[('w2v','avg'), ('splex','sum')], tuning=True, oversample=False, include_weights=False)
