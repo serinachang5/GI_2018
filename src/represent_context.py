@@ -2,7 +2,7 @@
 ===================
 represent_tweet_level.py
 ===================
-Authors: Serina Chang
+Authors: Ethan Adams
 Date: 04/27/2018
 Generate and write context embeddings.
 """
