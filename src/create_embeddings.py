@@ -17,7 +17,6 @@ from sentence_tokenizer import unicode_rep
 from sklearn.feature_extraction.text import CountVectorizer
 
 
-# Train on tweets in index form
 def generate_w2v_embs(sentences, option):
 	size = args['dim']
 	window = args['window']
@@ -34,12 +33,10 @@ def generate_w2v_embs(sentences, option):
 	print('Last 10 words in vocab:', vocab[-10:])
 
 	# save word vectors (as binary)
-	out_file = 'w2v_{0}_s{1}_w{2}_mc{3}_ep{4}.bin'.format(option, size, window,
-														  min_count, epochs)
+	out_file = 'w2v_{0}_s{1}_w{2}_mc{3}_ep{4}.bin'.format(option, size, window, min_count, epochs)
 	wv.save_word2vec_format(out_file, binary=True)
 	print('Word2Vec vectors saved to', out_file)
 
-# Train on tweets in unicode form
 def generate_svd_embs(sentences, option):
 	size = args['dim']
 
@@ -113,8 +110,7 @@ def generate_d2v_embs(sentences, tags, option):
 	model.delete_temporary_training_data(keep_doctags_vectors=True, keep_inference=True)
 
 	# need to save the whole model to keep
-	out_file = 'd2v_{0}_s{1}_w{2}_mc{3}_ep{4}.mdl'.format(option, size, window,
-														  	  min_count, epochs)
+	out_file = 'd2v_{0}_s{1}_w{2}_mc{3}_ep{4}.mdl'.format(option, size, window, min_count, epochs)
 	model.save(out_file)
 	print('Doc2Vec model saved to', out_file)
 
@@ -150,10 +146,6 @@ def sample_usage(fname, mode):
 		for seq,tag in zip(test_seqs, test_tags):
 			inferred = model.infer_vector(seq)
 			print(inferred[:10])
-			# HOW DO I CHECK IF TAG IN DOCVECS
-			if tag in list(model.docvecs):
-				raw = model.docvecs[tag]  # returns list of all docs with this tag
-				print(raw[0][:10])  # only want 0 because tag is unique
 
 def main(args):
 	# params for data loader
