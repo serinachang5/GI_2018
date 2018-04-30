@@ -1,3 +1,5 @@
+# coding=utf-8
+
 import pickle as pkl
 from preprocess import preprocess, to_char_array
 
