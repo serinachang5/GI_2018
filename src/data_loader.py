@@ -17,7 +17,10 @@ class Data_loader:
     each datapoint/tweet is a dictionary
     """
 
-    def __init__(self, vocab_size=40000, max_len=50, option='word', verbose=True, load_tweet=True):
+    def __init__(self, vocab_size=40000, max_len=50,
+                 word_vocab_size=40000, word_max_len=50,
+                 char_vocab_size=1000, char_max_len=150,
+                 option='word', verbose=True, load_tweet=True):
         """
         Parameters
         ----------
@@ -26,17 +29,22 @@ class Data_loader:
         option: the level of tokenization, "word" or "char"
         verbose: print progress while initializing
         """
-
-        # loading vocabulary level data
-        assert(option == 'word' or option == 'char') # the tokenziation level must be either at char or word
         self.option, self.vocab_size, self.max_len = option, vocab_size, max_len
+        assert(option in ['both', 'char', 'word'])
+        if option in ['char', 'word']:
+           self.word_vocab_size, self.word_max_len, self.char_vocab_size, self.char_max_len = [None] * 4
+        else:
+            self.word_vocab_size, self.word_max_len = word_vocab_size, word_max_len
+            self.char_vocab_size, self.char_max_len = char_vocab_size, char_max_len
+            self.vocab_size, self.max_len = None, None
+
         if verbose:
             print('Loading vocabulary ...')
         self.token2property = pkl.load(open('../model/' + option + '.pkl', 'rb')) # loading the preprocessed token file
         self.separator = ' ' if option == 'word' else '' # chars are not seperated, words are by spaces
         if option == 'word': # creating an id2wtoken dictionary
             self.id2token = dict([(self.token2property[word]['id'], word.decode()) for word in self.token2property])
-        else:
+        elif option == 'char':
             self.id2token = dict([(self.token2property[c]['id'], chr(c) if bytes(c) < bytes(256) else c.decode())
                                   for c in self.token2property])
         if verbose:
@@ -143,20 +151,31 @@ class Data_loader:
     # ========== Below are the helper functions of the class ==========
 
     def process_tweet_dictionary(self, record):
-        record['int_arr'] = record[self.option + '_int_arr']
-        del record['word_int_arr']
-        del record['char_int_arr']
-        record['padded_int_arr'] = self.pad_int_arr(record['int_arr'][:])
-        self.trim2vocab_size(record['int_arr'])
-        self.trim2vocab_size(record['padded_int_arr'])
+        if self.option != 'both':
+            record['int_arr'] = record[self.option + '_int_arr']
+            del record['word_int_arr']
+            del record['char_int_arr']
+            record['padded_int_arr'] = self.pad_int_arr(record['int_arr'][:])
+            self.trim2vocab_size(record['int_arr'])
+            self.trim2vocab_size(record['padded_int_arr'])
+        else:
+            record['word_padded_int_arr'] = self.pad_int_arr(record['word_int_arr'], self.word_max_len)[:]
+            self.trim2vocab_size(record['word_int_arr'], self.word_vocab_size)
+            record['char_padded_int_arr'] = self.pad_int_arr(record['char_int_arr'], self.char_max_len)[:]
+            self.trim2vocab_size(record['char_int_arr'], self.char_vocab_size)
 
-    def pad_int_arr(self, int_arr):
-        int_arr += [0] * self.max_len
-        return int_arr[:self.max_len]
 
-    def trim2vocab_size(self, int_arr):
+    def pad_int_arr(self, int_arr, max_len=None):
+        if max_len is None:
+            max_len = self.max_len
+        int_arr += [0] * max_len
+        return int_arr[:max_len]
+
+    def trim2vocab_size(self, int_arr, vocab_size=None):
+        if vocab_size is None:
+            vocab_size = self.vocab_size
         for idx in range(len(int_arr)):
-            if int_arr[idx] >= self.vocab_size:
+            if int_arr[idx] >= vocab_size:
                 int_arr[idx] = 1
 
     def get_records_by_idxes(self, idxes):
