@@ -12,8 +12,8 @@ def content2rep(vocab_size, max_len, drop_out=0.5,
     embed_layer = Embedding(vocab_size, embed_dim, input_length=max_len,
                             name='Embed')
     e_i = embed_layer(input_content)
+
     """TODO Confirm that there is no dropout/activation here"""
-    
     # convolutional layers
     conv_out = []
     for kernel_size in range(1, 6):
