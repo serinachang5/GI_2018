@@ -69,13 +69,8 @@ def int_array_rep(s, option='word', vocab_count=50000, debug=False):
         raise ValueError('Option %s not implemented' % option)
 
 if __name__ == '__main__':
-<<<<<<< HEAD
     s = 'FREE 🔓🔓 BRO @ReesemoneySODMG Shit is FU 😤😤👿 .....👮🏽👮🏽💥💥💥🔫 #ICLR https://dd'
     arr = int_array_rep(s, option='char', debug=True)
     print(arr)
     print(unicode_rep(arr, option='char'))
-=======
-    s = 'FREE 🔓🔓 BRO @ReesemoneySODMG Shit is FU 😤😤👿 .....👮🏽👮🏽💥💥💥🔫'
-    arr = int_array_rep(s, option='word', debug=True)
-    print(unicode_rep(arr, option='word'))
->>>>>>> 9fa4f5a23cb0dd6f784686c258e8506116e16f81
+
