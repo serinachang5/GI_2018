@@ -110,6 +110,7 @@ class Data_loader:
 
     # tokenize a string and convert it to int representation given the parameters of this data loader
     def convert2int_arr(self, s):
+        assert(self.option in ['char', 'word'])
         int_arr = int_array_rep(str(s), option=self.option, vocab_count=self.vocab_size)
         # int_arr = self.pad_int_arr(int_arr)
         return int_arr
