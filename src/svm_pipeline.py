@@ -24,12 +24,12 @@ def init_contextifier():
     use_mentions = args['use_mentions']
     use_rt_mentions = args['use_rt_mentions']
 
-    word_emb_file = './w2v_word_s300_w5_mc5_it20.bin'
+    word_emb_file = '../data/w2v_word_s300_w5_mc5_it20.bin'
     word_emb_type = 'w2v'
     word_tl_mode= args['word_tl_mode']
     word_cl_mode = args['word_cl_mode']
 
-    splex_file='./splex_standard_svd_word_s300_seeds_hc.pkl'
+    splex_file= '../data/splex_standard_svd_word_s300_seeds_hc.pkl'
     splex_tl_mode = args['splex_tl_mode']
     splex_cl_mode = args['splex_cl_mode']
 
@@ -80,12 +80,6 @@ def transform_data(data, ctfr, cm):
 
     return X, y
 
-def print_scores(cv_scores, args=None):
-    if args is not None:
-        print(args)
-    for fold_i,scores in enumerate(cv_scores):
-        print('Fold:', fold_i)
-
 def cross_validate(ctfr, cm):
     scores = []
     total_f1 = 0
@@ -113,10 +107,12 @@ def cross_validate(ctfr, cm):
         print('Testing dimensions:', X.shape, y.shape)
 
         pred = clf.predict(X)
-        p, r, f, _ = precision_recall_fscore_support(y, pred, average='macro')
-        scores.append([p,r,f])
-        print('Macro F1:', round(f, 5))
-        total_f1 += f
+        per_class = precision_recall_fscore_support(y, pred, average=None)
+        macros = precision_recall_fscore_support(y, pred, average='macro')
+        scores.append((per_class, macros))
+        print('Loss F1: {}. Agg F1: {}. Other F1: {}. Macro F1: {}.'.format(round(per_class[2][0],5), round(per_class[2][1],5),
+                                                                            round(per_class[2][2],5), round(macros[2],5)))
+        total_f1 += macros[2]
 
     print('AVERAGE F1:', round(total_f1/5, 5))
     return scores
@@ -150,7 +146,7 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description = '')
-    parser.add_argument('-iu', '--include_unigrams', type = bool, default = True, help = 'whether to include unigrams')
+    parser.add_argument('-iu', '--include_unigrams', type = bool, default = False, help = 'whether to include unigrams')
     parser.add_argument('-it', '--include_tweet_level', type = bool, default = True, help = 'whether to include tweet-level -- if false, all tweet-level parameters are ignored')
     parser.add_argument('-ic', '--include_context', type = bool, default = False, help = 'whether to include context -- if false, all context parameters are ignored')
 
