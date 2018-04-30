@@ -6,7 +6,7 @@ import random
 import pickle as pkl
 from preprocess import extract_mentioned_user_name, extract_user_rt
 
-user2property = pkl.load(open('../model/user.pkl', 'rb'))
+user2property = pkl.load(open('../model/non_anonymized_user.pkl', 'rb'))
 
 # a function that checks whether the idx dictionary satisfies the criteria
 def assert_idx_correctness(idx_dictionary):
@@ -195,7 +195,7 @@ def create_dataset(labeled_corpuses, unlabeled_corpuses, verbose=False):
     data = {'data': data_dictionary, 'classification_ind': idx_dictionary, 'user_time_ind': user_time_ind}
     if verbose:
         print('dumping data')
-    pkl.dump(data, open('../data/data.pkl', 'wb'))
+    pkl.dump(data, open('../data/new_data.pkl', 'wb'))
 
 labeled_corpuses = ['../data/tweets_2018_03_21/tweets_2018_03_21_' + t + '.csv'
                     for t in ['tr', 'val', 'test', 'ensemble']]

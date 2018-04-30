@@ -42,7 +42,7 @@ def int_array_rep(s, option='word', vocab_count=50000, debug=False):
     if option == 'word':
         utf8encode = preprocess(s)
     else:
-        utf8encode = preprocess(s, lower=False)
+        utf8encode = preprocess(s, char_level=True)
     result = []
     if option == 'word':
         for token in utf8encode.split(b' '):
@@ -67,6 +67,7 @@ def int_array_rep(s, option='word', vocab_count=50000, debug=False):
         raise ValueError('Option %s not implemented' % option)
 
 if __name__ == '__main__':
-    s = 'FREE 🔓🔓 BRO @ReesemoneySODMG Shit is FU 😤😤👿 .....👮🏽👮🏽💥💥💥🔫'
-    arr = int_array_rep(s, option='word', debug=True)
-    print(unicode_rep(arr, option='word'))
+    s = 'FREE 🔓🔓 BRO @ReesemoneySODMG Shit is FU 😤😤👿 .....👮🏽👮🏽💥💥💥🔫 #ICLR https://dd'
+    arr = int_array_rep(s, option='char', debug=True)
+    print(arr)
+    print(unicode_rep(arr, option='char'))
