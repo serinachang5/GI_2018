@@ -22,7 +22,11 @@ class Data_loader:
     def __init__(self, vocab_size=40000, max_len=50,
                  word_vocab_size=40000, word_max_len=50,
                  char_vocab_size=1000, char_max_len=150,
-                 option='word', verbose=True, load_tweet=True):
+                 option='word', verbose=True, load_tweet=True,
+                 labeled_only=False,
+                 **kwargs):
+        if verbose:
+            print('Data loader ...')
         """
         Parameters
         ----------
@@ -42,15 +46,20 @@ class Data_loader:
 
         if verbose:
             print('Loading vocabulary ...')
-        self.token2property = pkl.load(open('../model/' + option + '.pkl', 'rb')) # loading the preprocessed token file
-        self.separator = ' ' if option == 'word' else '' # chars are not seperated, words are by spaces
+        if option != 'both':
+            self.token2property = pkl.load(open('../model/' + option + '.pkl', 'rb')) # loading the preprocessed token file
+            self.separator = ' ' if option == 'word' else '' # chars are not seperated, words are by spaces
         if option == 'word': # creating an id2wtoken dictionary
             self.id2token = dict([(self.token2property[word]['id'], word) for word in self.token2property])
         elif option == 'char':
             self.id2token = dict([(self.token2property[c]['id'], chr(c) if bytes(c) < bytes(256) else c)
                                   for c in self.token2property])
-        if verbose:
+
+        if verbose and option != 'both':
             print('%d vocab is considered.' % min(len(self.id2token), self.vocab_size))
+        else:
+            print('%d word, max_len %d.' % (word_vocab_size, word_max_len))
+            print('%d char, max_len %d.' % (char_vocab_size, char_max_len))
         
         '''
         # loading user information
@@ -64,7 +73,10 @@ class Data_loader:
         # loading tweet level data
         if verbose:
             print('Loading tweets ...')
-        self.data = pkl.load(open('../data/data.pkl', 'rb'))
+        if not labeled_only:
+            self.data = pkl.load(open('../data/data.pkl', 'rb'))
+        else:
+            self.data = pkl.load(open('../data/labeled_data.pkl', 'rb'))
         # pad and trim the int representations of a tweet given the parameters of this Data_loader
         if verbose:
             print('Processing tweets ...')
@@ -164,17 +176,17 @@ class Data_loader:
             record['int_arr'] = record[self.option + '_int_arr']
             del record['word_int_arr']
             del record['char_int_arr']
-            record['padded_int_arr'] = self.pad_int_arr(record['int_arr'][:])
+            record['padded_int_arr'] = self.pad_int_arr(record['int_arr'])
             self.trim2vocab_size(record['int_arr'])
             self.trim2vocab_size(record['padded_int_arr'])
         else:
             record['word_padded_int_arr'] = self.pad_int_arr(record['word_int_arr'], self.word_max_len)[:]
-            self.trim2vocab_size(record['word_int_arr'], self.word_vocab_size)
+            self.trim2vocab_size(record['word_padded_int_arr'], self.word_vocab_size)
             record['char_padded_int_arr'] = self.pad_int_arr(record['char_int_arr'], self.char_max_len)[:]
-            self.trim2vocab_size(record['char_int_arr'], self.char_vocab_size)
-
+            self.trim2vocab_size(record['char_padded_int_arr'], self.char_vocab_size)
 
     def pad_int_arr(self, int_arr, max_len=None):
+        int_arr = int_arr[:]
         if max_len is None:
             max_len = self.max_len
         int_arr += [0] * max_len
@@ -194,19 +206,36 @@ class Data_loader:
         return self.data['data'][tweet_id]
 
 if __name__ == '__main__':
-    dl = Data_loader(vocab_size=40000, max_len=150, option='word', load_tweet=False)
-    print(dl.convert2int_arr('fake niggas get extorted 💯'))
-    exit(0)
-    dl = Data_loader(vocab_size=40000, max_len=150, option='word')
-    fold_idx = 0
-    tr, val, test = dl.cv_data(fold_idx)
-    for idx in range(10):
-        print('-------------')
-        dl.print_recovered_tweet(tr[idx])
+    debug_option = 'labeled_only'
 
-    user_tweets = dl.tweets_by_user(2)
-    for idx in range(10):
-        print('-------------')
-        dl.print_recovered_tweet(user_tweets[idx])
+    if debug_option == 'tokenizer_only':
+        dl = Data_loader(vocab_size=40000, max_len=150, option='word', load_tweet=False)
+        print(dl.convert2int_arr('fake niggas get extorted 💯'))
 
-    print(dl[423325236696580096])
+    elif debug_option == 'data_loader':
+        dl = Data_loader(vocab_size=40000, max_len=150, option='word')
+        fold_idx = 0
+        tr, val, test = dl.cv_data(fold_idx)
+        for idx in range(10):
+            print('-------------')
+            dl.print_recovered_tweet(tr[idx])
+
+        user_tweets = dl.tweets_by_user(2)
+        for idx in range(10):
+            print('-------------')
+            dl.print_recovered_tweet(user_tweets[idx])
+
+        print(dl[423325236696580096])
+
+    elif debug_option == 'labeled_only':
+        dl = Data_loader(vocab_size=40000, max_len=150, option='both', labeled_only=True)
+        fold = 5
+        for fold_idx in range(fold):
+            tr, val, test = dl.cv_data(fold_idx)
+            print(len([d for d in test if d['label'] == 'Aggression']))
+
+        ensemble_data = dl.ensemble_data()
+        print(ensemble_data[0])
+
+        test_data = dl.test_data()
+        print(test_data[0])

@@ -1,7 +1,6 @@
 from keras.layers import Input, Dense, Conv1D, Embedding, concatenate, \
     GlobalMaxPooling1D, Dropout
 from keras.models import Model
-import numpy as np
 
 # returns two tensors
 # one for input_content, the other for tensor before final classification
@@ -36,13 +35,14 @@ class NN_architecture:
 
     def __init__(self,
                  options,
-                 word_vocab_size, word_max_len,
-                 char_vocab_size, char_max_len,
+                 word_vocab_size=30000, word_max_len=50,
+                 char_vocab_size=1000, char_max_len=150,
                  drop_out=0.5,
                  filter=200, dense_size=256, embed_dim=300,
                  pretrained_weight_dir=None, weight_in_keras=None,
                  context_dim=None, context_dense_size=None,
                  splex_dense_size=None):
+        self.options = options
         # changeable hyper parameter
         self.drop_out = drop_out
         self.word_vocab_size, self.word_max_len = word_vocab_size, word_max_len
@@ -63,7 +63,7 @@ class NN_architecture:
     def create_model(self):
         # for each option, create computational graph and load weights
         inputs, last_tensors = [], []
-        for option in options:
+        for option in self.options:
 
             # how to map char input to the last layer
             if option in ['char', 'word']:
@@ -92,10 +92,12 @@ class NN_architecture:
             else:
                 print('Option %s has not been implemented yet.' % option)
 
-        concatenated_rep = concatenate(last_tensors)
+        if len(last_tensors) >= 2:
+            concatenated_rep = concatenate(last_tensors)
+        else:
+            concatenated_rep = last_tensors[0]
 
-
-        self.out_layer = Dense(3,
+        self.out_layer = Dense(3, activation='softmax',
                                name='classification')
         out = self.out_layer(concatenated_rep)
         self.model = Model(inputs=inputs, outputs=out)
