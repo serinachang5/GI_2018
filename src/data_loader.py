@@ -226,7 +226,7 @@ if __name__ == '__main__':
         fold = 5
         for fold_idx in range(fold):
             tr, val, test = dl.cv_data(fold_idx)
-            print(tr[0])
+            print(len([d for d in test if d['label'] == 'Aggression']))
 
         ensemble_data = dl.ensemble_data()
         print(ensemble_data[0])

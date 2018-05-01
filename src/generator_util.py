@@ -71,7 +71,7 @@ def simplest_tweet2data(tweet_dict):
         result['y'] = one_hot_labels[1]
     else:
         result['y'] = one_hot_labels[2]
-    result['content_input'] = tweet_dict['padded_int_arr']
+    result['word_content_input'] = tweet_dict['word_padded_int_arr']
     return result
 
 if __name__ == '__main__':
