@@ -1,15 +1,20 @@
 import numpy as np
+import random
 
 def helper_generator(X, y, batch_size, sample):
     counter = 0
-    num_data = len(X)
+    for key in X:
+        num_data = len(X[key])
+    order = [i for i in range(num_data)]
     while True:
+        if sample and counter % (num_data / batch_size) == 0:
+            random.shuffle(order)
         if sample:
-            idxes = np.randint(num_data, shape=(batch_size,))
+            idxes = [order[idx % num_data] for idx in range(counter, counter + batch_size)]
         else:
             idxes = [idx % num_data for idx in range(counter, counter + batch_size)]
-            counter += batch_size
-        return dict([(key, X[key][idxes]) for key in X]), y[idxes]
+        counter += batch_size
+        yield dict([(key, X[key][idxes]) for key in X]), y[idxes]
 
 def create_data(tweet2data, tweet_dicts, return_generators=False,
                 batch_size=32, sample=False):

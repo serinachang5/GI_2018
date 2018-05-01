@@ -5,6 +5,7 @@ from generator_util import create_clf_data, simplest_tweet2data
 import numpy as np
 import subprocess
 from sklearn.metrics import precision_recall_fscore_support
+from keras import backend as K
 
 def calculate_class_weight(y_train):
     class_count = np.sum(y_train, axis=0)
@@ -46,6 +47,7 @@ class Experiment:
             class_weight = calculate_class_weight(y_train)
 
             # initializing model, train and predict
+            K.clear_session()
             self.model = NN_architecture(**self.kwargs).model
             self.model.compile(optimizer='adam', loss='categorical_crossentropy')
 
@@ -69,9 +71,9 @@ class Experiment:
 
         # saving results
         results = np.array(results)
-        np.savetxt('result_by_fold.np', results)
-        np.savetxt('result_averaged.np', np.mean(results, axis=0))
-        np.savetxt('result_std.np', np.std(results, axis=0))
+        np.savetxt(self.experiment_dir + 'result_by_fold.np', results.flatten())
+        np.savetxt(self.experiment_dir + 'result_averaged.np', np.mean(results, axis=0))
+        np.savetxt(self.experiment_dir + 'result_std.np', np.std(results, axis=0))
 
         avg_macro_f = np.mean(np.mean(results, axis=0)[2])
         with open(self.experiment_dir + 'README', 'w') as readme:
