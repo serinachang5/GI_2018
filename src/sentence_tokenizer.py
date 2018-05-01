@@ -6,9 +6,12 @@ from preprocess import preprocess, to_char_array
 # loading the preprocessed dictionary
 word2property = pkl.load(open('../model/word.pkl', 'rb'))
 char2property = pkl.load(open('../model/char.pkl', 'rb'))
+
+#print char2property.keys()
+
 # creating an id to token map to debug
-id2word = dict([(word2property[word]['id'], word.decode()) for word in word2property])
-id2char = dict([(char2property[c]['id'], chr(c) if bytes(c) < bytes(256) else c.decode()) for c in char2property])
+id2word = dict([(word2property[word]['id'], word) for word in word2property])
+id2char = dict([(char2property[c]['id'], c) for c in char2property])#chr(c) if bytes(c) < bytes(256) else c) for c in char2property])
 
 # Given an array of integer, return a unicode representation
 def unicode_rep(arr, option='word'):
