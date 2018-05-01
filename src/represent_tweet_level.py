@@ -315,4 +315,4 @@ if __name__ == '__main__':
     #
     # visualize_reps(labeled_tweets, emb_type='d2v')
 
-    prelim_experiments(reps=[('w2v','avg'), ('splex','sum')], tuning=True, oversample=False, include_weights=False)
+    prelim_experiments(reps=[('w2v','avg'), ('splex','sum')], tuning=True, oversample=False, include_weights=True)
