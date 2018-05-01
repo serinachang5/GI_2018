@@ -45,9 +45,9 @@ class Data_loader:
         self.token2property = pkl.load(open('../model/' + option + '.pkl', 'rb')) # loading the preprocessed token file
         self.separator = ' ' if option == 'word' else '' # chars are not seperated, words are by spaces
         if option == 'word': # creating an id2wtoken dictionary
-            self.id2token = dict([(self.token2property[word]['id'], word.decode()) for word in self.token2property])
+            self.id2token = dict([(self.token2property[word]['id'], word) for word in self.token2property])
         elif option == 'char':
-            self.id2token = dict([(self.token2property[c]['id'], chr(c) if bytes(c) < bytes(256) else c.decode())
+            self.id2token = dict([(self.token2property[c]['id'], chr(c) if bytes(c) < bytes(256) else c)
                                   for c in self.token2property])
         if verbose:
             print('%d vocab is considered.' % min(len(self.id2token), self.vocab_size))
@@ -103,10 +103,16 @@ class Data_loader:
 
     # return all the data for unsupervised learning
     def all_data(self):
-        result = []
-        for tweet_idx in self.data['data']:
-            result.append(self.data['data'][tweet_idx])
-        return result
+        train = []
+        val = []
+
+        for tweet_idx in self.data['data']['unlabeled']['train']:
+            train.append(self.data['data'][tweet_idx])
+
+        for tweet_idx in self.data['data']['unlabeled']['val']:
+            val.append(self.data['data'][tweet_idx])
+
+        return train, val
 
     # tokenize a string and convert it to int representation given the parameters of this data loader
     def convert2int_arr(self, s):
