@@ -56,13 +56,13 @@ class TweetLevel:
 
         # get word-level embeddings
         if len(seq) == 0:
-            return self._get_neutral_word_level()
+            return self.get_neutral_word_level()
         found_embeddings = []
         for idx in seq:
             if idx in self.idx2emb:
                 found_embeddings.append(self.idx2emb[idx])
         if len(found_embeddings) == 0:
-            return self._get_neutral_word_level()
+            return self.get_neutral_word_level()
 
         # combine word-level embeddings
         if mode == 'avg':
@@ -86,11 +86,11 @@ class TweetLevel:
         if self.emb_type == 'd2v':
             sample_vec = self._get_docvec(['1'])
         else:
-            sample_vec = self._get_neutral_word_level()
+            sample_vec = self.get_neutral_word_level()
         return sample_vec.shape[0]
 
-    # private: get representation of neutral word
-    def _get_neutral_word_level(self):
+    # get representation of neutral word
+    def get_neutral_word_level(self):
         assert(self.idx2emb is not None and '1' in self.idx2emb)
         return self.idx2emb['1']
 
