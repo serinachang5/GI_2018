@@ -118,7 +118,7 @@ class Contextifier:
             
             # Add tweets to users' context tweets
             for u, post_type in incl_users:
-                if u in self.user_ct_tweets:
+                if u in user_ct_tweets:
                     user_ct_tweets[u].append((tweet, post_type))
                 else:
                     user_ct_tweets[u] = [(tweet, post_type)]
@@ -136,7 +136,7 @@ class Contextifier:
         return user_ct_tweets, id_to_location
 
 
-    def set_context(user_ct_tweets, id_to_location):
+    def set_context(self, user_ct_tweets, id_to_location):
         '''
         Set the context.
         Args:
@@ -159,7 +159,7 @@ class Contextifier:
         Returns:
             the tweet embedding
         '''
-        return tweet_level.get_representation(tweet_id, mode)
+        return self.tweet_level.get_representation(tweet_id, mode)
 
     def get_neutral_embedding(self):
         '''
@@ -171,7 +171,7 @@ class Contextifier:
         Returns:
             A neutral embedding
         '''
-        return tweet_level.get_neutral_word_level()
+        return self.tweet_level.get_neutral_word_level()
 
     def get_dimension(self):
         '''
@@ -181,7 +181,7 @@ class Contextifier:
         Returns:
             (int): the dimension. See TweetLevel.get_dimension().
         '''
-        return tweet_level.get_dimension()
+        return self.tweet_level.get_dimension()
 
 
     def _combine_embeddings(self, embeddings, mode):
@@ -237,14 +237,14 @@ class Contextifier:
                 continue 
             
             # Save tweet ids
-            if self.keep_stats:
+            if keep_stats:
                 tweet_ids.append(self.user_ct_tweets[user_id][i][0]['tweet_id'])
 
             # Get embedding
-            emb = self.get_tweet_embedding(self.user_ct_tweets[user_id][i][0]['tweet_id'])
+            emb = self.get_tweet_embedding(self.user_ct_tweets[user_id][i][0]['tweet_id'], self.tl_combine)
 
             # Weigh embedding
-            if context_hl != 0:
+            if context_hl not in [0, 1]:
                 diff = days_diff(today, self.user_ct_tweets[user_id][i][0]['created_at'])
                 weight = self.decay_rate ** (diff/context_hl)
                 emb = emb * weight
@@ -258,7 +258,7 @@ class Contextifier:
         if len(embs) == 0:
             result = self.get_neutral_embedding()
         else:
-            result = self._combine_embeddings(embs, self.combine_mode)
+            result = self._combine_embeddings(embs, self.context_combine)
 
         return result, tweet_ids
 
@@ -273,10 +273,10 @@ class Contextifier:
         Returns:
             (np.array(int)): the context embedding 
         '''
-        if tweet_id in tweet_to_ct: # Allows for reading in from files
-            return tweet_to_ct['tweet_id']
+        if tweet_id in self.tweet_to_ct: # Allows for reading in from files
+            return self.tweet_to_ct['tweet_id']
         return self._create_context_embedding(self.id_to_location[tweet_id][0],
-                                            self.id_to_location[tweet_ids][1],
+                                            self.id_to_location[tweet_id][1],
                                             keep_stats)
     
     def from_file(self, in_file):
@@ -294,7 +294,7 @@ class Contextifier:
                                                                     dtype=float, sep=' ')
         
 
-    def write_context_embeddings(self, out_file=None):
+    def write_context_embeddings(self, dl, out_file=None):
         '''
         Writes the embeddings to a file.
         Args:
@@ -304,12 +304,10 @@ class Contextifier:
         '''
 
         if not out_file:
-            out_file = 'context_emb_{0}_{1}_rt{2}_men{3}_rtmen{4}_hlr{5}_.csv' \
-                        .format(self.context_size, self.context_combine, self.use_rt_user, 
-                                self.use_mentions, self.use_rt_mentions, self.context_hl_ratio)
+            out_file = 'context_embeddings.csv' # should add in default name here
         tweet_to_ct = {}
         for fold_idx in range(0, 1):
-            tr, val, test = self.dl.cv_data(fold_idx)
+            tr, val, test = dl.cv_data(fold_idx)
             all_tweets = [t for l in [tr, val, test] for t in l ]
             for tweet in all_tweets: 
                 tweet_to_ct[tweet['tweet_id']] = self.get_context_embedding(tweet['tweet_id'])
@@ -317,7 +315,7 @@ class Contextifier:
         with open(out_file, 'w', newline='') as csvfile:
             writer = csv.writer(csvfile, delimiter=',')
             writer.writerow(['tweet_id', 'context_embedding'])
-            for tweet_id, ct_emb in self.tweet_to_ct.items():
+            for tweet_id, ct_emb in tweet_to_ct.items():
                 ct_emb_str = ' '.join([str(x) for x in ct_emb])
                 writer.writerow([tweet_id, ct_emb_str])
 
@@ -350,7 +348,7 @@ if __name__ == '__main__':
     # Can be done "on-demand" with .get_context_embedding()
 
     print('Writing context embeddings...')
-    contextifier.write_context_embeddings()
+    contextifier.write_context_embeddings(dl)
 
     # Alternatively, to load from a file, do:
     # contextifier.from_file('../data/'context_emb_5_avg_rtFalse_menTrue_rtmenFalse_hl1.0_.csv')
