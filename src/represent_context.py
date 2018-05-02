@@ -15,166 +15,185 @@ class Contextifier:
     '''
         Creates the context for tweets.
     '''
-    def __init__(self, context_size=1, context_combine='avg', use_rt_user=False, 
-                 use_mentions=False, use_rt_mentions=False, context_hl=1.0,
-                 word_emb_file='../data/w2v_word_s300_w5_mc5_it20.bin',
-                 word_emb_type='w2v',
-                 word_emb_mode='avg',
-                 splex_emb_file='../data/splex_standard_svd_word_s300_seeds_hc.pkl',
-                 splex_emb_mode='sum',
-                 keep_stats=False
-                 ):
+    # Magic strings to determine relationship between user and tweet
+    # From User A's perspective:
+    SELF = 'SELF'               # User A tweets
+    RETWEET = 'RETWEET'         # User A's tweet is retweted
+    MENTION = 'MENTION'         # User A is mentioned in User B's tweet
+    RETWEET_MENTION = 'RETWEET_MENTION'     # User C retweets user B's tweet,
+                                                # in which user was mentioned.
+    POST_TYPES = [SELF, RETWEET, MENTION, RETWEET_MENTION]
+    
+    
+    def __init__(self, tweet_level, post_types, context_size, context_hl_ratio,
+                    context_combine, tl_combine):
         '''
         Create it!
         Args:
-            context_size (int): Number of days to look back
-            context_combine (str): Method of combining tweet embeddings of tweets in context
-            use_rt_user (bool): User A retweets User B's tweet -- if true,
-                    this tweet will be counted in User A and User B's context
-            use_mentions (bool): User A tweets, mentioning User B -- if true, 
-                    this tweet will be in User A and User B's context
-            use_rt_mentions (bool): User A retweets User B's tweet, which mentioned User C -- if true,
-                    this tweet will counted in User A and User C's history
-            context_hl (int): Half life of context, in days. Tweet embeddings will be weighed according to
-                    (self.decay_rate)^(t/context_hl) where t is the number of days the previous tweet is 
-                    from the current one. Set to 0 for no weighting/decay.
-            word_emb_file (str): the path to the file to saved word embeddings
-            word_emb_file (str): the type of the word embedding file, e.g. 'w2v'. See TweetLevel for more info.
-            word_emb_mode (str): the mode to use when combining word embeddings at TweetLevel, e.g. 'avg'
-            splex_emb_file (str): the pickle file that contains the splex embeddings.
-            splex_emb_mode (str): the mode to use when combining splex scores at TweetLevel, e.g. 'sum'
+            tweet_level (TweetLevel): instance of TweetLevel class. See
+                represent_tweet_level.py.
+            post_types (list (str)): post types, must be within self.POST_TYPES
+            context_size (float): Number of days to look back
+            context_hl_ratio (float): Ratio of half life to context size. 
+                    Tweet embeddings will be weighed according to
+                    self.decay_rate)^(t/x) where t is the number of days the 
+                    previous tweet is from the current one, and x is 
+                    context_size * context_hl Set to 0 for no weighting/decay.
+            context_combine (str): method of combining tweet embeddings,
+                currently 'sum', 'avg', 'max'
+            tl_combine (str): method of combining embeddings into a tweet embedding,
+                currently 'sum', 'avg', 'max'
+
         '''
         # Save variables
+        self.tweet_level = tweet_level
+        self.set_post_types(post_types)
+        self.set_context_size(context_size)
+        self.set_context_hl_ratio(context_hl_ratio)
+        self.set_context_combine(context_combine)
+        self.set_tl_combine(tl_combine)
+
+        self.tweet_to_ct = {} # To allow for loading from files
+
+
+
+    def set_post_types(self, post_types):
+        self.post_types = []
+        for p in post_types:
+            if p not in self.POST_TYPES:
+                raise ValueError('Unrecognized post type:', p)
+            self.post_types.append(p)
+
+    def set_context_size(self, context_size):
         self.context_size = context_size
-        self.context_combine = context_combine
-        self.use_rt_user = use_rt_user
-        self.use_mentions = use_mentions
-        self.use_rt_mentions = use_rt_mentions
-        self.context_hl = context_hl
+
+    def set_context_hl_ratio(self, context_hl_ratio):
+        self.context_hl_ratio = context_hl_ratio
         self.decay_rate = 0.5 # hardcoded!
-        
-        # Tweets in a user's "context"
-        self.user_ct_tweets = {}
 
-        # All Data
-        option = 'word'
-        max_len = 20
-        vocab_size = 30000
-        self.dl = Data_loader(vocab_size=vocab_size, max_len=max_len, option=option)
-        self.all_data = self.dl.all_data()
-        
-        # Map from tweet id to tuple of (user, idx in sorted list)
-        # Note that "user" is user_post, the user who posted the tweet
-        self.id_to_location = {}
-        
-        # Tweet to context embedding
-        self.tweet_to_ct = {}
+    def set_context_combine(self, context_combine):
+        self.context_combine = context_combine
+
+    def set_tl_combine(self, tl_combine):
+        self.tl_combine = tl_combine
+
         
 
-        # Cache for combined tweet-level embeddings
-        self.tweet_emb_cache = {}
-
-        # Cache for calculated tweet-level word embeddings
-        self.tweet_word_cache = {}
-        # Cache for calculated tweet-level splex embeddings
-        self.tweet_splex_cache = {}
-        
-        # Initializing tools to get tweet-level embeddings
-        self.tl_word = TweetLevel(word_level=word_emb_file, wl_file_type=word_emb_type)
-        self.word_emb_mode = word_emb_mode
-        self.tl_splex = TweetLevel(word_level=splex_emb_file, wl_file_type='pkl')
-        self.splex_emb_mode = splex_emb_mode
-
-        # Hardcoding embedding size -- unsure how to change this
-        self.embeddings_dim = 300 + 3
-
-        # Keeping stats
-        self.keep_stats = keep_stats
-        if self.keep_stats:
-            # Tweet id to tweet ids in context window
-            self.tweet_to_ct_tweets = {}
-
-    
-    
-    def create_user_context_tweets(self):
+    def assemble_context(self, all_data):
         '''
         Sorts the tweets into self.user_ct_tweets, based on the variables
             self.use_rt_user, self.use_rt_mentions, and self.use_mentions
+        Args:
+            all_data (list): result of Data_loader.all_data(). All the tweets in the corpus.
+        Returns:
+            user_ct_tweets (dict (str -> list((int, str))): map from user_id to
+                list of (tweet, type) where tweet is the tweet and type is one
+                of self.SELF, self.RETWEET, self.MENTION, self.RETWEET_MENTION
+            id_to_location (int -> (str, int)): map from tweet id to
+                (username, index in user_ct_tweets).
         '''
+
+        # Tweets in a user's "context"
+        user_ct_tweets = {}
+        
+        # Map from tweet id to tuple of (user, idx in sorted list)
+        # Note that "user" is user_post, the user who posted the tweet
+        id_to_location = {}
         
         # For every tweet in the dataset (labled and unlabeled)
-        for tweet in self.all_data:
-            incl_users = set()
+        for tweet in all_data:
+            incl_users = []
             # Always include poster
-            incl_users.add(tweet['user_post'])
+            incl_users.append((tweet['user_post'], self.SELF))
             # Check if tweet is a retweet
             if 'user_retweet' in tweet:
-                # Include retweeted user
-                if self.use_rt_user:
-                    incl_users.add(tweet['user_retweet'])
+                incl_users.append((tweet['user_retweet'], self.RETWEET))
                 # Include users mentioned in retweet
-                if self.use_rt_mentions:
-                    incl_users.union(tweet['user_mentions'])
-            # Include mentioned users (non-retweet case)
-            elif self.use_mentions:
-                incl_users.union(tweet['user_mentions'])
+                rt_mentions = [(u, self.RETWEET_MENTION) for u in tweet['user_mentions']]
+                incl_users.extend(rt_mentions)
+            else:
+                # Include users mentioned (not retweet)
+                mentions = [(u, self.MENTION) for u in tweet['user_mentions']]
+                incl_users.extend(mentions)
             
             # Add tweets to users' context tweets
-            for u in incl_users:
+            for u, post_type in incl_users:
                 if u in self.user_ct_tweets:
-                    self.user_ct_tweets[u].append(tweet)
+                    user_ct_tweets[u].append((tweet, post_type))
                 else:
-                    self.user_ct_tweets[u] = [tweet]
+                    user_ct_tweets[u] = [(tweet, post_type)]
         
         # Sort context tweets chronologically
-        for u in self.user_ct_tweets:
-            self.user_ct_tweets[u] = sorted(self.user_ct_tweets[u], key=lambda t: t['created_at'])
+        for u in user_ct_tweets:
+            user_ct_tweets[u] = sorted(user_ct_tweets[u], key=lambda t: t[0]['created_at'])
             
         # Go through the tweets to save their location
-        for u, tweets in self.user_ct_tweets.items():
+        for u, tweets in user_ct_tweets.items():
             for idx, t in enumerate(tweets):
-                if u == t['user_post']:
-                    self.id_to_location[t['tweet_id']] = (u, idx)
+                if u == t[0]['user_post']:
+                    id_to_location[t[0]['tweet_id']] = (u, idx)
+
+        return user_ct_tweets, id_to_location
+
+
+    def set_context(user_ct_tweets, id_to_location):
+        '''
+        Set the context.
+        Args:
+            user_ct_tweets: see self.assemble_context().
+            id_to_location: see self.assemble_context().
+        Returns:
+            None
+        '''
+        self.user_ct_tweets = user_ct_tweets
+        self.id_to_location = id_to_location
     
     
-    def get_tweet_embedding(self, tweet_id):
+    def get_tweet_embedding(self, tweet_id, mode):
         '''
         Get the tweet embedding for the given tweet.
         Args:
             tweet_id (int): the id of the tweet, according to twitter's ID system
+            mode (str): the mode of combining embeddings at the tweet level.
+                See TweetLevel.get_representation()
         Returns:
             the tweet embedding
         '''
-        if tweet_id in self.tweet_emb_cache: # Check cache for embedding
-            return self.tweet_emb_cache[tweet_id]
-        else:
-            w_emb = self.tl_word.get_representation(tweet_id, mode=self.word_emb_mode)
-            sp_emb =  self.tl_splex.get_representation(tweet_id, mode=self.splex_emb_mode)
-            full_emb = np.concatenate([w_emb, sp_emb])
-            self.tweet_emb_cache[tweet_id] = full_emb # Save embedding to cache
-            return full_emb
+        return tweet_level.get_representation(tweet_id, mode)
 
-    def get_word_embedding(self, tweet_id):
-        # add cache back in here
-        if tweet_id in self.tweet_word_cache:
-            return self.tweet_word_cache[tweet_id]
-        else:
-            res = self.tl_word.get_representation(tweet_id, mode=self.word_emb_mode)
-            self.tweet_word_cache[tweet_id] = res
-            return res
+    def get_neutral_embedding(self):
+        '''
+        Get a neutral embedding. Note: this could eventually be changed
+            to get a more accurate neutral embedding, by using the
+            method of combining at the tweet level.
+        Args:
+            None
+        Returns:
+            A neutral embedding
+        '''
+        return tweet_level.get_neutral_word_level()
 
-    def get_splex_embedding(self, tweet_id):
-        # add cache back in here
-        if tweet_id in self.tweet_splex_cache:
-            return self.tweet_splex_cache[tweet_id]
-        else:
-            res = self.tl_splex.get_representation(tweet_id, mode=self.splex_emb_mode)
-            self.tweet_splex_cache[tweet_id] = res
-            return res
+    def get_dimension(self):
+        '''
+        Get the dimension of tweet level representation.
+        Args:
+            None
+        Returns:
+            (int): the dimension. See TweetLevel.get_dimension().
+        '''
+        return tweet_level.get_dimension()
 
 
-    def combine_embeddings(self, embeddings, mode):
-        # documentation
+    def _combine_embeddings(self, embeddings, mode):
+        '''
+        Combine embeddings, according the given mode.
+        Args:
+            embeddings (list): a list of embeddings
+            mode (str): 'avg', 'sum', or 'max'
+        Returns:
+            the combined embeddings (dims equivalent to size of one embedding
+                in embeddings)
+        '''
         result = None
         if mode == 'avg':
             result = np.mean(np.array(embeddings), axis=0)
@@ -187,116 +206,78 @@ class Contextifier:
         return result
     
     
-    def create_context_embedding(self, user_id, tweet_idx):
+    def _create_context_embedding(self, user_id, tweet_idx, keep_stats):
         '''
         Get the context embedding for the given tweet, determined by user and index.
         Args:
             user_id (int): the id of the user, according to data_loader's user ids
             tweet_idx (int): the index of the tweet in self.user_ct_tweets[user_id]
+        Returns:
+            the context embeddings
+            (list (int)): the ids of tweets in the context window
         '''
-        # Check if context embedding is in the cache
-        tweet_id = self.user_ct_tweets[user_id][tweet_idx]['tweet_id']
-        if tweet_id in self.tweet_to_ct:
-            return self.tweet_to_ct[tweet_id]
         
         # Return difference in days, as a float
         def days_diff(d1, d2):
             return (d1 - d2).total_seconds() / 60 / 60 / 24
         
-        w_embs = []
-        splex_embs = []
+        embs = [] # embeddings
         tweet_ids = [] # for stats
+        context_hl = self.context_size * self.context_hl_ratio # set half life
         
-        today = self.user_ct_tweets[user_id][tweet_idx]['created_at']
+        today = self.user_ct_tweets[user_id][tweet_idx][0]['created_at']
         i = tweet_idx-1
-        while i >= 0 and days_diff(today, self.user_ct_tweets[user_id][i]['created_at']) \
+        while i >= 0 and days_diff(today, self.user_ct_tweets[user_id][i][0]['created_at']) \
                                      < self.context_size:
-
+            
+            # Confirm post type is one we want to include
+            post_type = self.user_ct_tweets[user_id][i][1]
+            if post_type not in self.post_types:
+                i -= 1
+                continue 
+            
             # Save tweet ids
             if self.keep_stats:
-                tweet_ids.append(self.user_ct_tweets[user_id][i]['tweet_id'])
+                tweet_ids.append(self.user_ct_tweets[user_id][i][0]['tweet_id'])
 
-            # Get embeddings -- may need to change
-            w_emb = self.get_word_embedding(self.user_ct_tweets[user_id][i]['tweet_id'])
-            splex_emb = self.get_splex_embedding(self.user_ct_tweets[user_id][i]['tweet_id'])
+            # Get embedding
+            emb = self.get_tweet_embedding(self.user_ct_tweets[user_id][i][0]['tweet_id'])
 
             # Weigh embedding
-            if self.context_hl != 0:
-                diff = days_diff(today, self.user_ct_tweets[user_id][i]['created_at'])
-                weight = self.decay_rate ** (diff/self.context_hl)
-                w_emb = w_emb * weight
-                splex_emb = splex_emb * weight
+            if context_hl != 0:
+                diff = days_diff(today, self.user_ct_tweets[user_id][i][0]['created_at'])
+                weight = self.decay_rate ** (diff/context_hl)
+                emb = emb * weight
 
             # Save
-            w_embs.append(w_emb)
-            splex_embs.append(splex_emb)
+            embs.append(emb)
             i -= 1
 
-        # Save stats
-        if self.keep_stats:
-            self.tweet_to_ct_tweets[tweet_id] = tweet_ids
-        
         # Combine word embeddings
-        w_comb = None
-        if len(w_embs) == 0:
-            w_comb = np.zeros(300, ) #AH! i don't have to hardcode these now
+        result = None
+        if len(embs) == 0:
+            result = self.get_neutral_embedding()
         else:
-            w_comb = self.combine_embeddings(w_embs, self.word_emb_mode)
+            result = self._combine_embeddings(embs, self.combine_mode)
 
-        # Combine splex embeddings
-        splex_comb = None
-        if len(splex_embs) == 0:
-            splex_comb = np.zeros(3, ) # still hardcoded
-        else:
-            splex_comb = self.combine_embeddings(splex_embs, self.splex_emb_mode)    
-        
-        # Concatenate to get result
-        result = np.concatenate([w_comb, splex_comb])
+        return result, tweet_ids
 
-        # Cache the result
-        self.tweet_to_ct[tweet_id] = result
-        return result
 
-    def reset_context_embeddings(self):
-        self.tweet_to_ct = {} # Reset embeddings
-    
-    
-    def create_context_embeddings(self):
-        '''
-        Create the context embeddings for the tweets.
-        '''
-        for fold_idx in range(0, 5):
-            tr, val, test = self.dl.cv_data(fold_idx)
-            all_tweets = [t for l in [tr, val, test] for t in l ]
-            for tweet in all_tweets: 
-                self.tweet_to_ct[tweet['tweet_id']] = self.create_context_embedding(
-                    *self.id_to_location[tweet['tweet_id']])
-    
-    
-    def get_context_embedding(self, tweet_id):
+    def get_context_embedding(self, tweet_id, keep_stats=False):
         '''
         Get the context embedding for the specified tweet, determined by tweet_id
         Args:
             tweet_id (int): the id of the tweet, according to the twitter tweet ids
+             keep_stats (bool): if true, return how many tweets were in the
+                context window
         Returns:
             (np.array(int)): the context embedding 
         '''
-        if len(self.user_ct_tweets) == 0:
-            raise ValueError('User contexts have not been created. First call .create_user_context_tweets().')
-        if tweet_id in self.tweet_to_ct:
-            return self.tweet_to_ct[tweet_id]
-        else:
-            # note: some weirdness going on here with loading from files
-            return self.create_context_embedding(*self.id_to_location[tweet_id])
-
-
-    def get_context_tweets(self, tweet_id):
-        # return ids of tweets in context
-        if tweet_id in self.tweet_to_ct_tweets:
-            return self.tweet_to_ct_tweets[tweet_id]
-        else:
-            raise ValueError('no calculated tweet ids in context') # fix this
-
+        if tweet_id in tweet_to_ct: # Allows for reading in from files
+            return tweet_to_ct['tweet_id']
+        return self._create_context_embedding(self.id_to_location[tweet_id][0],
+                                            self.id_to_location[tweet_ids][1],
+                                            keep_stats)
     
     def from_file(self, in_file):
         '''
@@ -313,7 +294,6 @@ class Contextifier:
                                                                     dtype=float, sep=' ')
         
 
-    
     def write_context_embeddings(self, out_file=None):
         '''
         Writes the embeddings to a file.
@@ -322,10 +302,18 @@ class Contextifier:
         Returns:
             None
         '''
+
         if not out_file:
-            out_file = 'context_emb_{0}_{1}_rt{2}_men{3}_rtmen{4}_hl{5}_.csv' \
+            out_file = 'context_emb_{0}_{1}_rt{2}_men{3}_rtmen{4}_hlr{5}_.csv' \
                         .format(self.context_size, self.context_combine, self.use_rt_user, 
-                                self.use_mentions, self.use_rt_mentions, self.context_hl)
+                                self.use_mentions, self.use_rt_mentions, self.context_hl_ratio)
+        tweet_to_ct = {}
+        for fold_idx in range(0, 1):
+            tr, val, test = self.dl.cv_data(fold_idx)
+            all_tweets = [t for l in [tr, val, test] for t in l ]
+            for tweet in all_tweets: 
+                tweet_to_ct[tweet['tweet_id']] = self.get_context_embedding(tweet['tweet_id'])
+
         with open(out_file, 'w', newline='') as csvfile:
             writer = csv.writer(csvfile, delimiter=',')
             writer.writerow(['tweet_id', 'context_embedding'])
@@ -334,29 +322,32 @@ class Contextifier:
                 writer.writerow([tweet_id, ct_emb_str])
 
 
-
 if __name__ == '__main__':
 
     # Tester/usage
+    tweet_level = TweetLevel('../data/splex_minmax_svd_word_s300_seeds_hc.pkl')
+    post_types = [Contextifier.SELF, Contextifier.RETWEET, Contextifier.MENTION,
+                    Contextifier.RETWEET_MENTION]
     context_size = 2
-    context_combine = 'avg' 
-    use_rt_user = True
-    use_mentions = True
-    use_rt_mentions = True
-    context_hl = 2
-    word_emb_file='../data/w2v_word_s300_w5_mc5_it20.bin'
-    word_emb_type='w2v'
-    splex_emb_file='../data/splex_standard_svd_word_s300_seeds_hc.pkl'
-    contextifier = Contextifier(context_size, context_combine, use_rt_user, use_mentions,
-         use_rt_mentions, context_hl, word_emb_file, word_emb_type, splex_emb_file)
+    context_hl_ratio = 0.5
+    context_combine = 'avg'
+    tl_combine = 'sum'
+    
+    contextifier = Contextifier(tweet_level, post_types, context_size,
+                                context_hl_ratio, context_combine, tl_combine)
 
-    print('Creating user contexts...')
-    contextifier.create_user_context_tweets()
+    option = 'word'
+    max_len = 53
+    vocab_size = 30000
+    dl = Data_loader(vocab_size=vocab_size, max_len=max_len, option=option)
+    dl.all_data()
+
+    print('Creating contexts...')
+    context = contextifier.assemble_context(dl.all_data())
+    contextifier.set_context(*context)
 
     # Only necessary if you want to write them all to a file.
     # Can be done "on-demand" with .get_context_embedding()
-    print('Creating context embeddings...')
-    contextifier.create_context_embeddings()
 
     print('Writing context embeddings...')
     contextifier.write_context_embeddings()
