@@ -3,6 +3,19 @@ from keras.layers import Input, Dense, Conv1D, Embedding, concatenate, \
 from keras.models import Model
 import pandas as pd
 
+# print the results from a directory
+def print_results_from_dir(dir_name):
+    fold_result = np.loadtxt('../experiments/' + dir_name + '/result_by_fold.np')
+    fold_result = np.reshape(fold_result, (-1, 4, 3))
+    for idx in range(len(fold_result)):
+        print('results for fold %d.' % (idx + 1))
+        print_results_from_np(r)
+    print('Mean for each entry')
+    print_results_from_np(np.mean(fold_result, axis=0))
+    print_results_from_np(np.std(fold_result, axis=0))
+
+# given a numpy array that encodes the result
+# print the classification statistics
 def print_results_from_np(result_np):
     result_np = result_np.T
     d = [{'precision': r[0], 'recall': r[1], 'f-score': r[2], 'support': r[3]} for r in result_np]
@@ -43,7 +56,7 @@ class NN_architecture:
     def __init__(self,
                  options,
                  word_vocab_size=30000, word_max_len=50,
-                 char_vocab_size=1000, char_max_len=140,
+                 char_vocab_size=1000, char_max_len=150,
                  drop_out=0.5,
                  filter=200, dense_size=256, embed_dim=300, kernel_range=range(1,6),
                  pretrained_weight_dir=None, weight_in_keras=None,

@@ -23,6 +23,10 @@ def calculate_class_weight(y_train):
 def adapt_vocab(X_train, X_list):
     for key in X_train:
         if key in [option + '_content_input' for option in ['char', 'word']]:
+            if 'char' in key:
+                threshold = 3
+            else:
+                threshold = 2
             wc = {}
             for xs in X_train[key]:
                 for x in xs:
@@ -30,7 +34,7 @@ def adapt_vocab(X_train, X_list):
                         wc[x] = 0
                     wc[x] += 1
             def f(x):
-                return x if (wc.get(x) is not None and wc[x] >= 2) else 1
+                return x if (wc.get(x) is not None and wc[x] >= threshold) else 1
             X_train[key] = np.array([[f(x) for x in xs] for xs in X_train[key]])
             for X in X_list:
                 X[key] = np.array([[f(x) for x in xs] for xs in X[key]])
@@ -159,7 +163,7 @@ class Experiment:
         np.savetxt(self.experiment_dir + 'result_std.np', np.std(results, axis=0))
 
         avg_macro_f = np.mean(np.mean(results, axis=0)[2])
-        with open(self.experiment_dir + 'README', 'w') as readme:
+        with open(self.experiment_dir + 'README', 'a') as readme:
             readme.write('macro F-score: %.4f\n' % avg_macro_f)
 
 if __name__ == '__main__':
