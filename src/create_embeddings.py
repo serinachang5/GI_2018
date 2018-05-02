@@ -33,7 +33,7 @@ def generate_w2v_embs(sentences, option):
 	print('Last 10 words in vocab:', vocab[-10:])
 
 	# save word vectors (as binary)
-	out_file = 'w2v_{0}_s{1}_w{2}_mc{3}_ep{4}.bin'.format(option, size, window, min_count, epochs)
+	out_file = '../data/w2v_{0}_s{1}_w{2}_mc{3}_ep{4}.bin'.format(option, size, window, min_count, epochs)
 	wv.save_word2vec_format(out_file, binary=True)
 	print('Word2Vec vectors saved to', out_file)
 
@@ -55,7 +55,7 @@ def generate_svd_embs(sentences, option):
 	print('Embedding dim:', len(list(embs.values())[0]))
 
 	# save as pickle file
-	out_file = 'svd_{0}_s{1}.pkl'.format(option, size)
+	out_file = '../data/svd_{0}_s{1}.pkl'.format(option, size)
 	with open(out_file, 'wb') as f:
 		pickle.dump(embs, f)
 	print('SVD embeddings saved to', out_file)
@@ -110,7 +110,7 @@ def generate_d2v_embs(sentences, tags, option):
 	model.delete_temporary_training_data(keep_doctags_vectors=True, keep_inference=True)
 
 	# need to save the whole model to keep
-	out_file = 'd2v_{0}_s{1}_w{2}_mc{3}_ep{4}.mdl'.format(option, size, window, min_count, epochs)
+	out_file = '../data/d2v_{0}_s{1}_w{2}_mc{3}_ep{4}.mdl'.format(option, size, window, min_count, epochs)
 	model.save(out_file)
 	print('Doc2Vec model saved to', out_file)
 
@@ -198,8 +198,8 @@ if __name__ == '__main__':
 
 	main(args)
 
-	# w2v_file = 'w2v_word_s300_w5_mc5_it20.bin'
-	# svd_file = 'svd_word_s300.pkl'
+	# w2v_file = '../data/w2v_word_s300_w5_mc5_it20.bin'
+	# svd_file = '../data/svd_word_s300.pkl'
 	# sample_usage(w2v_file, svd_file)
 
 	# test_sents = [['2', '254', '440', '192', '94', '57', '72', '77'],

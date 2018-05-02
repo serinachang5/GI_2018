@@ -60,17 +60,40 @@ def save_scaled(splex, specs, scale_type='minmax'):
     if scale_type == 'minmax': # per feature, subtract min and divide by range -> (0,1) range
         scaled_scores = MinMaxScaler().fit_transform(scores)
         scaled_splex = dict((indices[i], scaled_scores[i]) for i in range(len(indices)))
-        splex_file = 'splex_' + scale_type + '_' + specs + '.pkl'
+        splex_file = '../data/splex_' + scale_type + '_' + specs + '.pkl'
         with open(splex_file, 'wb') as f:
             pickle.dump(scaled_splex, f)
         print('Saved scaled splex in', splex_file)
     else: # per feature, scale mean to 0 and variance to 1
         scaled_scores = StandardScaler().fit_transform(scores)
         scaled_splex = dict((indices[i], scaled_scores[i]) for i in range(len(indices)))
-        splex_file = 'splex_' + scale_type + '_' + specs + '.pkl'
+        splex_file = '../data/splex_' + scale_type + '_' + specs + '.pkl'
         with open(splex_file, 'wb') as f:
             pickle.dump(scaled_splex, f)
         print('Saved scaled splex in', splex_file)
+
+# scale by .5 but reward loss vs aggression based on whichever one is stronger
+def save_loss_agg_balanced(splex, specs):
+    sorted_splex = sorted(splex.items(), key=lambda x:int(x[0]))
+    indices = [x[0] for x in sorted_splex]
+    scores = np.array([x[1] for x in sorted_splex])
+    scaled_scores = np.zeros(scores.shape, dtype=np.float)
+    for i in range(scores.shape[0]):
+        orig_loss, orig_agg, orig_sub = scores[i]
+        loss_agg_sum = orig_loss + orig_agg
+        loss_scaled = orig_loss * (orig_loss/loss_agg_sum) if loss_agg_sum > .01 else orig_loss * .5
+        agg_scaled = orig_agg * (orig_agg/loss_agg_sum) if loss_agg_sum > .01 else orig_agg * .5
+        sub_scaled = orig_sub * .5
+        scaled_scores[i] = [loss_scaled, agg_scaled, sub_scaled]
+        if i > 100 and i < 105:
+            print('Orig:', scores[i])
+            print('New:', scaled_scores[i])
+
+    scaled_splex = dict((indices[i], scaled_scores[i]) for i in range(len(indices)))
+    splex_file = '../data/splex_balanced_' + specs + '.pkl'
+    with open(splex_file, 'wb') as f:
+        pickle.dump(scaled_splex, f)
+    print('Saved balanced splex file to', splex_file)
 
 def eval_seeds(loss, agg, sub, splex):
     print('LOSS SEED SET')
@@ -140,13 +163,15 @@ if __name__ == '__main__':
     # loss, agg, sub = pickle.load(open('seeds_hc.pkl', 'rb'))
     # prep_seed_sets(loss, agg, sub, specs='hc')
 
-    # raw_splex = pickle.load(open('splex_raw_svd_word_s300_seeds_hc.pkl', 'rb'), encoding='latin1')
+    # raw_splex = pickle.load(open('../data/splex_raw_svd_word_s300_seeds_hc.pkl', 'rb'), encoding='latin1')
     # print('Loaded raw SPLex:', len(raw_splex))
-    # save_scaled(raw_splex, specs='svd_word_s300_seeds_hc', scale_type='standard')
 
-    splex = pickle.load(open('splex_standard_svd_word_s300_seeds_hc.pkl', 'rb'))
-    loss, agg, sub = pickle.load(open('seeds_hc_idx_p2.pkl', 'rb'))
-    eval_seeds(loss, agg, sub, splex)
-    eval_top_words(splex)
+    splex = pickle.load(open('../data/splex_minmax_svd_word_s300_seeds_hc.pkl', 'rb'))
+    save_loss_agg_balanced(splex, specs='minmax_svd_word_s300_seeds_hc')
+
+    # splex = pickle.load(open('splex_standard_svd_word_s300_seeds_hc.pkl', 'rb'))
+    # loss, agg, sub = pickle.load(open('seeds_hc_idx_p2.pkl', 'rb'))
+    # eval_seeds(loss, agg, sub, splex)
+    # eval_top_words(splex)
 
     # sample_usage()

@@ -9,10 +9,10 @@ Pipeline for cross-validating SVM.
 
 import argparse
 from data_loader import Data_loader
-import numpy as np
-import pickle
 from represent_context import Contextifier
 from represent_tweet_level import TweetLevel
+import numpy as np
+import pickle
 from scipy.sparse import csr_matrix, hstack
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics import precision_recall_fscore_support
@@ -47,9 +47,14 @@ def init_count_model():
 
 def init_TL(emb_type, tweet_dict):
     if emb_type == 'w2v':
-        tl = TweetLevel(emb_file='../data/w2v_word_s300_w5_mc5_it20.bin', tweet_dict=tweet_dict)
+        if args['use_d2v']:
+            tl = TweetLevel(emb_file='../data/d2v_word_s300_w5_mc5_ep20.mdl', tweet_dict=tweet_dict)
+        else:
+            tl = TweetLevel(emb_file='../data/w2v_word_s300_w5_mc5_it20.bin', tweet_dict=tweet_dict)
     elif emb_type == 'splex':
-        tl = TweetLevel(emb_file='../data/splex_minmax_svd_word_s300_seeds_hc.pkl', tweet_dict=tweet_dict)
+        scaling = args['splex_scale']
+        assert(scaling == 'minmax' or scaling == 'standard' or scaling == 'balanced_minmax')
+        tl = TweetLevel(emb_file='../data/splex_' + scaling + '_svd_word_s300_seeds_hc.pkl', tweet_dict=tweet_dict)
     else:
         tl = TweetLevel(emb_file='../data/d2v_word_s300_w5_mc5_ep20.mdl', tweet_dict=tweet_dict)
     return tl
@@ -74,8 +79,8 @@ def transform_data(data, models):
     label_to_idx = {'Loss':0, 'Aggression':1, 'Other':2}
     y = np.array([label_to_idx[t['label']] for t in data])
 
-    # model_type mapped to representation matrix
-    reps = dict((model_type, []) for model_type in models)
+    # rep_type mapped to representation matrix
+    reps = dict((rep_type, []) for rep_type in models)
 
     # build unigram representation matrix
     if 'count' in reps:
@@ -91,7 +96,10 @@ def transform_data(data, models):
         if 'w2v_tl' in reps:
             reps['w2v_tl'].append(models['w2v_tl'].get_representation(t_id, args['w2v_tl_mode']))
         if 'splex_tl' in reps:
-            reps['splex_tl'].append(models['splex_tl'].get_representation(t_id, args['splex_tl_mode']))
+            splex_tl_rep = models['splex_tl'].get_representation(t_id, args['splex_tl_mode'])
+            if not args['include_sub_splex_tl']:
+                splex_tl_rep = splex_tl_rep[:2]  # only keep loss and aggression scores
+            reps['splex_tl'].append(splex_tl_rep)
         if 'w2v_cl' in reps:
             reps['w2v_cl'].append(models['w2v_cl'].get_representation(t_id, args['w2v_cl_mode']))
         if 'splex_cl' in reps:
@@ -167,14 +175,25 @@ def main(args):
     if args['include_unigrams']:
         specs.append('uni')
         specs.append(str(args['unigram_size']))
+
     if args['include_w2v_tl']:
-        specs.append('wt')
+        if args['use_d2v']:
+            specs.append('dt')
+        else:
+            specs.append('wt')
+
     if args['include_splex_tl']:
         specs.append('st')
+        specs.append(args['splex_scale'])
+        if args['include_sub_splex_tl']:
+            specs.append('wsub')
+
     if args['include_w2v_cl']:
         specs.append('wc')
+
     if args['include_splex_cl']:
         specs.append('sc')
+
     assert(len(specs) > 0)
 
     if args['tuning']:
@@ -205,12 +224,15 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description = '')
     parser.add_argument('-iu', '--include_unigrams', type = bool, default = False, help = 'whether to include unigrams')
-    parser.add_argument('-usize', '--unigram_size', type = int, default = 5000, help = 'number of unigrams to include')
+    parser.add_argument('-usize', '--unigram_size', type = int, default = 10000, help = 'number of unigrams to include')
 
     parser.add_argument('-iwt', '--include_w2v_tl', type = bool, default = True, help = 'whether to include w2v embeddings at tweet-level; if false, w2v-tweet params are ignored')
+    parser.add_argument('-d2v', '--use_d2v', type = bool, default = False, help = 'use doc2vec instead of aggregated w2v embedding for tweet-level')
     parser.add_argument('-wtmode', '--w2v_tl_mode', type = str, default = 'avg', help = 'how to combine w2v embeddings at tweet-level')
 
     parser.add_argument('-ist', '--include_splex_tl', type = bool, default = True, help = 'whether to include splex at tweet-level')
+    parser.add_argument('-stscale', '--splex_scale', type = str, default = 'minmax', help = 'which scaling of splex to use')
+    parser.add_argument('-isub', '--include_sub_splex_tl', type = bool, default = False, help = 'whether to include splex substance use scores at tweet-level')
     parser.add_argument('-stmode', '--splex_tl_mode', type = str, default = 'sum', help = 'how to combine splex scores into tweet-level')
 
     parser.add_argument('-iwc', '--include_w2v_cl', type = bool, default = False, help = 'whether to include w2v embeddings in context; if false, w2v-context params are ignored')
@@ -229,9 +251,9 @@ if __name__ == '__main__':
     parser.add_argument('-scmen', '--splex_use_mentions', type = bool, default = True, help = 'splex-context: User A tweets, mentioning User B -- if true, this tweet will be in User A and User B\'s context')
     parser.add_argument('-scrtmen', '--splex_use_rt_mentions', type = bool, default = True, help = 'splex-context: User A retweets User B\'s tweet, which mentioned User C -- if true,this tweet will counted in User A and User C\'s history')
 
-    parser.add_argument('-tn', '--tuning', type = bool, default = True, help = 'whether parameters are being tuned -- if true, cross-val will train on train and test on val per folder; if false, cross-val will train on train+val and test on test')
+    parser.add_argument('-tn', '--tuning', type = bool, default = False, help = 'whether parameters are being tuned -- if true, cross-val will train on train and test on val per folder; if false, cross-val will train on train+val and test on test')
 
     args = vars(parser.parse_args())
     print(args)
 
-    # main(args)
+    main(args)

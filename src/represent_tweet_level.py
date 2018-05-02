@@ -9,11 +9,10 @@ Generate and visualize tweet-level embeddings, write them to file.
 
 from data_loader import Data_loader
 from gensim.models import KeyedVectors, Doc2Vec
-import matplotlib.pyplot as plt
 import numpy as np
 import pickle
-from sklearn.manifold import TSNE
-
+import statsmodels.api as sm
+from scipy.stats.stats import pearsonr
 
 class TweetLevel:
     def __init__(self, emb_file, tweet_dict = None):
@@ -120,7 +119,6 @@ class TweetLevel:
         min_per_dim = np.min(embs_by_dim, axis=1)
         return min_per_dim
 
-
 def test_TL(emb_type):
     assert(emb_type == 'w2v' or emb_type == 'splex' or emb_type == 'd2v')
     if emb_type == 'w2v':
@@ -206,49 +204,24 @@ def check_written_embeddings(emb_type, rep_mode = None):
             if count == 100:
                 return
 
-# visualize representations of loss vs aggression tweets
-# labeled_tweets is a list of (tweet_id, label) tuples
-# include_sub only applies to emb_type 'splex' -- whether to include the Substance score or not
-def visualize_reps(labeled_tweets, emb_type, rep_mode = None, include_sub = True):
-    assert(emb_type == 'w2v' or emb_type == 'splex' or emb_type == 'd2v')
-    if emb_type == 'w2v':
-        tl = TweetLevel(emb_file='../data/w2v_word_s300_w5_mc5_it20.bin')
-        assert(rep_mode is not None)
-    elif emb_type == 'splex':
-        tl = TweetLevel(emb_file='../data/splex_minmax_svd_word_s300_seeds_hc.pkl')
-        assert(rep_mode is not None)
-    else:
-        tl = TweetLevel(emb_file='../data/d2v_word_s300_w5_mc5_ep20.mdl')
+def check_corr():
+    tl = TweetLevel(emb_file='../data/splex_balanced_minmax_svd_word_s300_seeds_hc.pkl')
+    reps = np.array([rep for id, rep in tl.get_all_representations(mode='sum')])
+    all_loss = reps.T[0]
+    all_agg = reps.T[1]
+    all_sub = reps.T[2]
 
-    label_to_color = {'Aggression':'r', 'Loss':'b'}
-    X = []
-    color_map = []
-    for (tweet_id, label) in labeled_tweets:
-        if label == 'Loss' or label == 'Aggression':
-            rep = tl.get_representation(tweet_id, rep_mode)
-            if emb_type == 'splex' and include_sub is False:
-                rep = rep[:2]
-            X.append(rep)
-            color_map.append(label_to_color[label])
-    X = np.array(X)
-    print('Built tweet by embedding matrix of shape', X.shape)
+    print('Pearson for loss-agg:', pearsonr(all_loss, all_agg))
+    ols = sm.OLS(all_loss, all_agg).fit()
+    print(ols.summary())
 
-    if X.shape[1] > 2:
-        print('Transforming with TSNE...')
-        X = TSNE(n_components=2).fit_transform(X)
+    print('Pearson for loss-sub:', pearsonr(all_loss, all_sub))
+    ols = sm.OLS(all_loss, all_sub).fit()
+    print(ols.summary())
 
-    print('Plotting X with dimensions', X.shape)
-    plt.figure(figsize=(6,6))  # make sure figure is square
-    plt.scatter(X[:, 0], X[:, 1], c=color_map)
-
-    specs = emb_type
-    if emb_type != 'd2v':
-        specs += '_' + rep_mode
-    title = 'Visualization of tweet-level embeddings ({})'.format(specs)
-    plt.title(title)
-
-    plt.show()
-
+    print('Pearson from agg-sub:', pearsonr(all_agg, all_sub))
+    ols = sm.OLS(all_agg, all_sub).fit()
+    print(ols.summary())
 
 if __name__ == '__main__':
     # modes = ['max', 'min']
@@ -256,17 +229,4 @@ if __name__ == '__main__':
     # write_reps_to_file(emb_type='splex', rep_modes=modes)
     # check_written_embeddings(emb_type='splex', rep_mode='avg')
 
-    max_len = 53
-    vocab_size = 30000
-    option = 'word'
-    print('Initializing Data Loader')
-    dl = Data_loader(vocab_size=vocab_size, max_len=max_len, option=option)
-
-    tr, val, tst = dl.cv_data(fold_idx=0)
-    labeled_tweets = tr + val + tst
-    labeled_tweets = [(x['tweet_id'], x['label']) for x in labeled_tweets]
-    print('Number of labeled tweets:', len(labeled_tweets))
-
-    visualize_reps(labeled_tweets, emb_type='splex', rep_mode='sum')
-
-    # test_TL('d2v')
+    test_TL('d2v')
