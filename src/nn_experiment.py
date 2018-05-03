@@ -211,6 +211,15 @@ class Experiment:
 
             # prediction
             y_pred = self.model.predict(x=X_test)
+            y_pred_val = self.model.predict(x=X_val)
+
+            # saving predictions for ensembles
+            np.savetxt(self.experiment_dir + 'pred_test' + str(fold_idx) + '.np', y_pred)
+            np.savetxt(self.experiment_dir + 'pred_val' + str(fold_idx) + '.np', y_pred_val)
+            np.savetxt(self.experiment_dir + 'truth_test' + str(fold_idx) + '.np', y_test)
+            np.savetxt(self.experiment_dir + 'truth_val' + str(fold_idx) + '.np', y_test)
+
+            # make y categorical
             y_pred = np.argmax(y_pred, axis=-1)
             y_test = np.argmax(y_test, axis=-1)
             results.append(precision_recall_fscore_support(y_pred, y_test))

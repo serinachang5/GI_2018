@@ -148,7 +148,7 @@ class NN_architecture:
             _model_.load_weights(self.pretrained_weight_dir)
 
 if __name__ == '__main__':
-    options = ['char', 'word', 'context']
+    options = ['char', 'word']
     nn = NN_architecture(options,
                          word_vocab_size=40000, word_max_len=50,
                          char_vocab_size=1000, char_max_len=150,
