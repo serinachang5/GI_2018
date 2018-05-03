@@ -1,11 +1,27 @@
 from keras.callbacks import EarlyStopping, ModelCheckpoint
 from model_def import NN_architecture
 from data_loader import Data_loader
-from generator_util import create_clf_data, simplest_tweet2data
+from generator_util import create_clf_data
 import numpy as np
 import subprocess
 from sklearn.metrics import precision_recall_fscore_support
 from keras import backend as K
+from sklearn.metrics import f1_score
+
+def extract_dim_input_name2id2np(input_name2id2np):
+    dim_map = {}
+    for input_name in input_name2id2np:
+        id2np = input_name2id2np[input_name]
+        dim = None
+        for id in id2np:
+            if dim is None:
+                dim = id2np[id].shape[0]
+            assert(id2np.shape) == (dim, )
+        dim_map[input_name] = dim
+    return dim_map
+
+def myf1(y_true, y_pred):
+    return f1_score(np.argmax(y_true, axis=-1), np.argmax(y_pred, axis=-1), average='macro')
 
 # calculating the classweight given the y_train
 # the weight will be inversely proprotional to the label
@@ -23,10 +39,7 @@ def calculate_class_weight(y_train):
 def adapt_vocab(X_train, X_list):
     for key in X_train:
         if key in [option + '_content_input' for option in ['char', 'word']]:
-            if 'char' in key:
-                threshold = 3
-            else:
-                threshold = 2
+            threshold = 2
             wc = {}
             for xs in X_train[key]:
                 for x in xs:
@@ -42,14 +55,13 @@ def adapt_vocab(X_train, X_list):
 # an experiment class that runs cross validation
 class Experiment:
 
-    def __init__(self, tweet2data, experiment_dir, adapt_train_vocab=False,
+    def __init__(self, input_name2id2np, experiment_dir, adapt_train_vocab=False,
                  comments='', epochs=20, patience=4, **kwargs):
         """
         an experiment class that runs cross validation
         designed to enable easy experiments with combinations of:
         1) context representation:
-            handled by tweet2data, implement the value for key "context_input"
-            include "context" in options
+            handled by input_name2id2np
         2) pre-training methods:
             handled by pretrained_weight_dir in the kwargs argument
             None if there is no pretraining weight available
@@ -57,14 +69,11 @@ class Experiment:
             specified in "options"
             options = ['char', 'word'] if you want to include both
             implement the value for key "word_content_input"
-        options = ['char', 'word', 'context'] if you want to include everything
+        options = ['char', 'word'] if you want to include everything
 
         Parameters
         ----------
-        tweet2data: a function that maps a tweet dictionary to a dictionary that contains (key, val) pairs s.t.
-                    key is recognizable by the neural network model,
-                    val is a numpy array
-                    see example in generator_util.py, simplest_tweet2data
+        input_name2id2np:
         experiment_dir: the directory that the experiment weights and results will be saved
         adapt_train_vocab: under supervised training without pretraining,
                             some vocab will not be seen (twice) in the training set.
@@ -76,7 +85,7 @@ class Experiment:
 
         ========== below is the parameters needed by the neural network model ==========
 
-        options: an array containing all the options considered in the neural network model ['char', 'word', 'context']
+        options: an array containing all the options considered in the neural network model ['char', 'word']
                     (probably splex in the future)
                     for each option, the input is mapped to a lower dimension,
                     then the lower dimension representation of each option is concatenated
@@ -113,7 +122,9 @@ class Experiment:
                 readme.write("%s: %s\n" % (str(key), str(kwargs[key])))
 
         # initializing fields of the class
-        self.tweet2data = tweet2data
+        if input_name2id2np is None:
+            input_name2id2np = {}
+        self.input_name2id2np = input_name2id2np
         self.fold = 5
         self.dl = Data_loader(option='both', labeled_only=True, **kwargs)
         self.epochs, self.patience = epochs, patience
@@ -127,7 +138,7 @@ class Experiment:
             # retriving cross validataion data
             fold_data = self.dl.cv_data(fold_idx)
             ((X_train, y_train), (X_val, y_val), (X_test, y_test)) = \
-                create_clf_data(self.tweet2data, fold_data, return_generators=False)
+                create_clf_data(self.input_name2id2np, fold_data, return_generators=False)
             if self.adapt_train_vocab:
                 adapt_vocab(X_train, (X_val, X_test))
 
@@ -135,11 +146,12 @@ class Experiment:
 
             # initializing model, train and predict
             K.clear_session()
+            self.kwargs['input_dim_map'] = extract_dim_input_name2id2np(self.input_name2id2np)
             self.model = NN_architecture(**self.kwargs).model
             self.model.compile(optimizer='adam', loss='categorical_crossentropy')
 
             # call backs
-            es = EarlyStopping(patience=self.patience, verbose=1, mode='auto')
+            es = EarlyStopping(patience=self.patience, monitor=myf1, verbose=1, mode='max')
             weight_dir = self.experiment_dir + str(fold_idx) + '.weight'
             mc = ModelCheckpoint(weight_dir,
                                  save_best_only=True, save_weights_only=True)
@@ -168,6 +180,6 @@ class Experiment:
 
 if __name__ == '__main__':
     options = ['word']
-    experiment = Experiment(tweet2data=simplest_tweet2data, experiment_dir='test', adapt_train_vocab=True,
+    experiment = Experiment(experiment_dir='test', adapt_train_vocab=True,
                             options=options)
     experiment.cv()

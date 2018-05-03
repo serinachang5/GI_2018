@@ -19,7 +19,7 @@ def count_occurrence(corpus_dirs):
         [{} for _ in range(5)]
     tweet_id_read = set()
     for corpus_dir in corpus_dirs:
-        df = pd.read_csv(corpus_dir)
+        df = pd.read_json(corpus_dir)
         texts = df['text'].values
         users = df['user_name'].values
         tweet_ids = df['tweet_id'].values
@@ -140,8 +140,8 @@ def create_vocab(labeled_corpuses, unlabeled_corpuses, word_file_dir, char_file_
 
     Parameters
     ----------
-    labeled_corpuses: a list of labeled corpus file directory in csv format
-    unlabeled_corpuses: a list of unlabeled corpus file directory in csv format
+    labeled_corpuses: a list of labeled corpus file directory in json format
+    unlabeled_corpuses: a list of unlabeled corpus file directory in json format
     word_file_dir: output directory of the vocab-index lookup
     char_file_dir: output directory of the char-index lookup
 
@@ -191,26 +191,25 @@ def create_vocab(labeled_corpuses, unlabeled_corpuses, word_file_dir, char_file_
     user2property['UNKNOWN_USER'] = user2property[b'_UNKNOWN_']
     del user2property[b'_UNKNOWN_']
 
-    '''
+
     with open(word_file_dir, 'wb') as out_word_file:
        pkl.dump(word2property, out_word_file)
-    '''
 
     with open(char_file_dir, 'wb') as out_char_file:
         pkl.dump(char2property, out_char_file)
 
-    '''
+
     if '' in user2property:
         del user2property['']
         
     with open(user_file_dir, 'wb') as out_user_file:
         pkl.dump(user2property, out_user_file)
-    '''
+
 
 if __name__ == '__main__':
-    labeled_corpuses = ['../data/tweets_2018_03_21/tweets_2018_03_21_' + t + '.csv'
-                        for t in ['tr', 'val', 'test', 'ensemble']]
-    unlabeled_corpuses = ['../data/ScrapedTweets_26thOct.csv', '../data/gnip_data.csv']
+    labeled_corpuses = ['../data/tweets_2018_03_21/tweets_2018_03_21_' + t + '.json'
+                        for t in ['tr', 'val', 'ensemble']]
+    unlabeled_corpuses = ['../data/ScrapedTweets_26thOct.json', '../data/gnip_data.json']
     word_file_dir, char_file_dir, user_file_dir = ['../model/' + s + '.pkl' for s in ['word', 'char', 'user']]
     create_vocab(labeled_corpuses, unlabeled_corpuses, word_file_dir, char_file_dir, user_file_dir,
                  verbose=True)

@@ -43,11 +43,30 @@ class Data_loader:
             self.word_vocab_size, self.word_max_len = word_vocab_size, word_max_len
             self.char_vocab_size, self.char_max_len = char_vocab_size, char_max_len
             self.vocab_size, self.max_len = None, None
+            self.word2property = pkl.load(open('../model/word.pkl', 'rb'))
+            removed_words = []
+            for word in self.word2property:
+                if self.word2property[word]['id'] >= word_vocab_size:
+                    removed_words.append(word)
+            for word in removed_words:
+                del self.word2property[word]
+            removed_chars = []
+            for char in self.char2property:
+                if self.char2property[word]['id'] >= char_vocab_size:
+                    removed_chars.append(char)
+            for char in removed_words:
+                del self.char2property[char]
 
         if verbose:
             print('Loading vocabulary ...')
         if option != 'both':
             self.token2property = pkl.load(open('../model/' + option + '.pkl', 'rb')) # loading the preprocessed token file
+            removed_tokens = []
+            for token in self.token2property:
+                if self.token2property[token]['id'] >= vocab_size:
+                    removed_tokens.append(token)
+            for token in removed_tokens:
+                del self.token2property[token]
             self.separator = ' ' if option == 'word' else '' # chars are not seperated, words are by spaces
         if option == 'word': # creating an id2wtoken dictionary
             self.id2token = dict([(self.token2property[word]['id'], word) for word in self.token2property])
@@ -115,16 +134,11 @@ class Data_loader:
 
     # return all the data for unsupervised learning
     def all_data(self):
-        train = []
-        val = []
+        return self.get_records_by_idxes([tid for tid in self.data['data']])
 
-        for tweet_idx in self.data['data']['unlabeled']['train']:
-            train.append(self.data['data'][tweet_idx])
-
-        for tweet_idx in self.data['data']['unlabeled']['val']:
-            val.append(self.data['data'][tweet_idx])
-
-        return train, val
+    def unlabeled_tr_val(self):
+        return [self.get_records_by_idxes(tids) for tids in [self.data['unlabeled_tr'],
+                                                             self.data['unlabeled_val']]]
 
     # tokenize a string and convert it to int representation given the parameters of this data loader
     def convert2int_arr(self, s):
@@ -152,7 +166,7 @@ class Data_loader:
 
     # convert an int array to the unicode representation
     def convert2unicode(self, int_arr):
-        return self.separator.join([self.id2token[id] for id in int_arr])
+        return self.separator.join([str(self.id2token[id]) for id in int_arr])
 
     def print_recovered_tweet(self, tweet_property):
         for key in tweet_property:
@@ -232,7 +246,7 @@ if __name__ == '__main__':
         fold = 5
         for fold_idx in range(fold):
             tr, val, test = dl.cv_data(fold_idx)
-            print(len([d for d in test if d['label'] == 'Aggression']))
+            print(len([d for d in val if d['label'] == 'Aggression']))
 
         ensemble_data = dl.ensemble_data()
         print(ensemble_data[0])

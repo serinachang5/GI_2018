@@ -162,11 +162,6 @@ def preprocess(s, char_level=False, debug=False):
     url_regex = re.compile('http[s]?://(?:[a-z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-f][0-9a-f]))+')
     tokens = ['!url' if url_regex.match(token) else token for token in tokens]
 
-    hashtag_regex = re.compile("(?:\#+[\w_]+[\w\'_\-]*[\w_]+)")
-
-    if not char_level:
-        tokens = ['#hashtag' if hashtag_regex.match(token) else token for token in tokens]
-
     s = ' '.join([t for t in tokens if t]).replace('rt @user : ', '')
     utf8encoded = s.encode('utf-8')
     if debug:

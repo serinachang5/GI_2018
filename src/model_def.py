@@ -55,19 +55,18 @@ class NN_architecture:
 
     def __init__(self,
                  options,
-                 word_vocab_size=30000, word_max_len=50,
+                 input_dim_map,
+                 word_vocab_size=40000, word_max_len=50,
                  char_vocab_size=1000, char_max_len=150,
                  drop_out=0.5,
                  filter=200, dense_size=256, embed_dim=300, kernel_range=range(1,6),
-                 pretrained_weight_dir=None, weight_in_keras=None,
-                 context_dim=None, context_dense_size=None,
-                 splex_dense_size=None):
+                 pretrained_weight_dir=None, weight_in_keras=None):
         """
         Initilizing a neural network architecture according to the specification
 
         Parameters
         ----------
-        options: an array containing all the options considered in the neural network model ['char', 'word', 'context']
+        options: an array containing all the options considered in the neural network model ['char', 'word']
                     (probably splex in the future)
                     for each option, the input is mapped to a lower dimension,
                     then the lower dimension representation of each option is concatenated
@@ -85,20 +84,15 @@ class NN_architecture:
                     e.g. {'char': '../weights/char_ds.weights'} means that the pretrained weight for character level model
                     is in ../weights/char_ds.weights
         weight_in_keras: whether the weight is in Keras
-        context_dim: the dimension of context representation
-        context_dense_size: the dense layer size right before the context representation
-        splex_dense_size: dense layer size right before the splex reps
         """
         self.options = options
+        self.input_dim_map = input_dim_map
         # changeable hyper parameter
         self.drop_out = drop_out
         self.word_vocab_size, self.word_max_len = word_vocab_size, word_max_len
         self.char_vocab_size, self.char_max_len = char_vocab_size, char_max_len
         # hyper parameters that is mostly fixed
         self.filter, self.dense_size, self.embed_dim, self.kernel_range = filter, dense_size, embed_dim, kernel_range
-        # context dimension
-        self.context_dim, self.context_dense_size = context_dim, context_dense_size
-        self.splex_dense_size = splex_dense_size
         # pretrained_weight directory
         self.pretrained_weight_dirs, self.weight_in_keras = pretrained_weight_dir, weight_in_keras
         if self.pretrained_weight_dirs is None:
@@ -127,17 +121,10 @@ class NN_architecture:
                 self.load_pretrained_weights(input_content, content_rep,
                                              self.pretrained_weight_dirs.get(option), self.weight_in_keras.get(option))
 
-            # how to map context input to the last layer
-            elif option == 'context':
-                input_context = Input(shape=(self.context_dim,),
-                                      name='context_input')
-                context_layer = Dense(self.context_dense_size, activation='relu',
-                                      name='context_last')
-                context_rep = context_layer(input_context)
-                inputs.append(input_context)
-                last_tensors.append(context_rep)
-            else:
-                print('Option %s has not been implemented yet.' % option)
+
+        for input_name in self.input_dim_map:
+            last_tensors.append(Input(shape=(self.input_dim_map[input_name],),
+                                      name=input_name + '_input'))
 
         if len(last_tensors) >= 2:
             concatenated_rep = concatenate(last_tensors)
@@ -161,7 +148,7 @@ class NN_architecture:
 if __name__ == '__main__':
     options = ['char', 'word', 'context']
     nn = NN_architecture(options,
-                         word_vocab_size=30000, word_max_len=50,
+                         word_vocab_size=40000, word_max_len=50,
                          char_vocab_size=1000, char_max_len=150,
                          context_dim=300, context_dense_size=256,
                          pretrained_weight_dir=None, weight_in_keras=None)

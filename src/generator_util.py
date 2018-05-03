@@ -16,7 +16,7 @@ def helper_generator(X, y, batch_size, sample):
         counter += batch_size
         yield dict([(key, X[key][idxes]) for key in X]), y[idxes]
 
-def create_data(tweet2data, tweet_dicts, return_generators=False,
+def create_data(input_name2id2np, tweet_dicts, return_generators=False,
                 batch_size=32, sample=False):
     """
     A map that takes in tweet dictionaries and return data points readable for keras fit/fit_generator
@@ -37,13 +37,26 @@ def create_data(tweet2data, tweet_dicts, return_generators=False,
     step_size: number of times for a generator to complete one epoch
 
     """
-    data = []
-    keys = [key for key in tweet2data(tweet_dicts[0])]
+    data, keys = [], None
 
     # convert each tweet_dict to a dictionary that only contains field that is recognizable and useulf
     # for the model
     for tweet_dict in tweet_dicts:
-        data.append(tweet2data(tweet_dict))
+        result = {}
+        one_hot_labels = np.eye(3)
+        if tweet_dict['label'] == 'Aggression':
+            result['y'] = one_hot_labels[0]
+        elif tweet_dict['label'] == 'Loss':
+            result['y'] = one_hot_labels[1]
+        else:
+            result['y'] = one_hot_labels[2]
+        result['word_content_input'] = tweet_dict['word_padded_int_arr']
+        result['char_content_input'] = tweet_dict['char_padded_int_arr']
+        for input_name in input_name2id2np:
+            result[input_name] = input_name2id2np[input_name][tweet_dict['tweet_id']]
+        if keys is None:
+            keys = [key for key in result]
+        data.append(result)
 
     X = dict([(key, np.array([d[key] for d in data])) for key in keys])
     y = np.array([d['y'] for d in data])
@@ -56,11 +69,11 @@ def create_data(tweet2data, tweet_dicts, return_generators=False,
     step_size = len(X) / batch_size
     return generator, step_size
 
-def create_clf_data(tweet2data, tr_test_val_dicts, return_generators=False, batch_size=32):
+def create_clf_data(input_name2id2np, tr_test_val_dicts, return_generators=False, batch_size=32):
     tr, val, test = tr_test_val_dicts
-    return (create_data(tweet2data, tr, return_generators=return_generators, batch_size=batch_size, sample=True),
-            create_data(tweet2data, val, return_generators=return_generators, batch_size=batch_size, sample=False),
-            create_data(tweet2data, test, return_generators=return_generators, batch_size=batch_size, sample=False))
+    return (create_data(input_name2id2np, tr, return_generators=return_generators, batch_size=batch_size, sample=True),
+            create_data(input_name2id2np, val, return_generators=return_generators, batch_size=batch_size, sample=False),
+            create_data(input_name2id2np, test, return_generators=return_generators, batch_size=batch_size, sample=False))
 
 # an example of tweet2data
 # takes in a tweet dictionary
@@ -83,8 +96,8 @@ def simplest_tweet2data(tweet_dict):
 if __name__ == '__main__':
     from data_loader import Data_loader
     option = 'word'
-    max_len = 20
-    vocab_size = 30000
+    max_len = 50
+    vocab_size = 40000
     dl = Data_loader(vocab_size=vocab_size, max_len=max_len, option=option)
     fold_idx = 0
     data_fold = dl.cv_data(fold_idx)

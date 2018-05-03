@@ -1,12 +1,13 @@
 from sentence_tokenizer import int_array_rep
 import pandas as pd
 from dateutil import parser
-import time
-import random
 import pickle as pkl
 from preprocess import extract_mentioned_user_name, extract_user_rt
+from sklearn.model_selection import StratifiedKFold, train_test_split
+import random
+import numpy as np
 
-user2property = pkl.load(open('../model/non_anonymized_user.pkl', 'rb'))
+user2property = pkl.load(open('../model/user.pkl', 'rb'))
 
 # a function that checks whether the idx dictionary satisfies the criteria
 def assert_idx_correctness(idx_dictionary):
@@ -53,7 +54,7 @@ def retrieve_content(labeled_corpuses, unlabeled_corpuses, verbose):
     for corpus_dir in labeled_corpuses + unlabeled_corpuses:
         if verbose:
             print('reading data from %s ...' % corpus_dir)
-        df = pd.read_csv(corpus_dir)
+        df = pd.read_json(corpus_dir)
         records = df.to_dict('records')
         tweetid2tweet = {}
         for record in records:
@@ -108,30 +109,37 @@ def create_cv_idx(tr, val, idx_dictionary, fold):
 
     Parameters
     ----------
-    tr: training csv file
-    val: validation csv file
+    tr: training json file
+    val: validation json file
     idx_dictionary: the index dictionary
 
     """
     idx_dictionary['cross_val'] = [{} for _ in range(fold)]
+    df_tr, df_val = pd.read_json(tr), pd.read_json(val)
 
-    # reading tr, val file
-    df_tr, df_val = pd.read_csv(tr), pd.read_csv(val)
-    tr_val_test_idx = df_tr['tweet_id'].values.tolist() + df_val['tweet_id'].values.tolist()
-    num_cv_data = len(tr_val_test_idx)
-    random.shuffle(tr_val_test_idx)
+    tr_val_test_idx = np.array(df_tr['tweet_id'].values.tolist() + df_val['tweet_id'].values.tolist())
+    labels = np.array(df_tr['label'].values.tolist() + df_val['label'].values.tolist())
 
-    # creating test index for each cross validation
-    cutoffpoints = [int(p *  num_cv_data / fold) for p in range(fold + 1)]
-    cutoffpoints[-1] = num_cv_data
-    for fold_idx in range(fold):
-        idx_dictionary['cross_val'][fold_idx]['test_ind'] = set(tr_val_test_idx[cutoffpoints[fold_idx]:cutoffpoints[fold_idx + 1]])
-        fold_tr_val_idx = tr_val_test_idx[:cutoffpoints[fold_idx]] + tr_val_test_idx[cutoffpoints[fold_idx + 1]:]
-        random.shuffle(fold_tr_val_idx)
-        cv_tr_size = int(len(fold_tr_val_idx) * 0.8)
-        idx_dictionary['cross_val'][fold_idx]['train_ind'] = set(fold_tr_val_idx[:cv_tr_size])
-        idx_dictionary['cross_val'][fold_idx]['val_ind'] = set(fold_tr_val_idx[cv_tr_size:])
+    skf = StratifiedKFold(n_splits=fold)
+    skf.get_n_splits(tr_val_test_idx, labels)
+    skf.split(tr_val_test_idx, labels)
+    fold_idx = 0
+    for train_index, test_index in skf.split(tr_val_test_idx, labels):
+        train_val_idx, test_idx = tr_val_test_idx[train_index], tr_val_test_idx[test_index]
+        train_ind, val_ind = train_test_split(train_val_idx, test_size=0.2, stratify=labels[train_index])
+        idx_dictionary['cross_val'][fold_idx]['train_ind'] = train_ind
+        idx_dictionary['cross_val'][fold_idx]['val_ind'] = val_ind
+        idx_dictionary['cross_val'][fold_idx]['test_ind'] = test_idx
+        fold_idx += 1
 
+def create_unlabeled_ind(data_dictionary):
+    unlabeled_tweet_id = []
+    for tweet_id in data_dictionary:
+        if data_dictionary[tweet_id].get('label') is None:
+            unlabeled_tweet_id.append(tweet_id)
+    random.shuffle(unlabeled_tweet_id)
+    train_size = int(len(unlabeled_tweet_id) * 0.8)
+    return unlabeled_tweet_id[:train_size], unlabeled_tweet_id[train_size:]
 
 def create_data_idx(labeled_corpuses, fold=5):
     """
@@ -148,8 +156,8 @@ def create_data_idx(labeled_corpuses, fold=5):
     idx_dictionary = {}
 
     # read the ensemble and heldout test dataframe, which is the same
-    df_ensemble = pd.read_csv(ensemble)
-    df_heldout_test = pd.read_csv(held_out_test)
+    df_ensemble = pd.read_json(ensemble)
+    df_heldout_test = pd.read_json(held_out_test)
     idx_dictionary['ensemble_ind'] = set(df_ensemble['tweet_id'].values.tolist())
     idx_dictionary['heldout_test_ind'] = set(df_heldout_test['tweet_id'].values.tolist())
 
@@ -192,14 +200,26 @@ def create_dataset(labeled_corpuses, unlabeled_corpuses, verbose=False):
         print('creating user-time indexing')
     user_time_ind = user_time_indexing(data_dictionary)
 
-    data = {'data': data_dictionary, 'classification_ind': idx_dictionary, 'user_time_ind': user_time_ind}
+    unlabeled_tr, unlabeled_val = create_unlabeled_ind(data_dictionary)
+
+    data = {'data': data_dictionary, 'classification_ind': idx_dictionary, 'user_time_ind': user_time_ind,
+            'unlabeled_tr': unlabeled_tr, 'unlabeled_val': unlabeled_val}
+
     if verbose:
         print('dumping data')
-    pkl.dump(data, open('../data/new_data.pkl', 'wb'))
+    pkl.dump(data, open('../data/data.pkl', 'wb'))
 
-labeled_corpuses = ['../data/tweets_2018_03_21/tweets_2018_03_21_' + t + '.csv'
+    del data['user_time_ind']
+    for tid in data['unlabeled_tr'] + data['unlabeled_val']:
+        del data['data'][tid]
+    del data['unlabeled_tr']
+    del data['unlabeled_val']
+
+    pkl.dump(data, open('../data/labeled_data.pkl', 'wb'))
+
+labeled_corpuses = ['../data/tweets_2018_03_21/tweets_2018_03_21_' + t + '.json'
                     for t in ['tr', 'val', 'test', 'ensemble']]
-unlabeled_corpuses = ['../data/ScrapedTweets_26thOct.csv', '../data/gnip_data.csv']
+unlabeled_corpuses = ['../data/ScrapedTweets_26thOct.json', '../data/gnip_data.json']
 
 if __name__ == '__main__':
     create_dataset(labeled_corpuses, unlabeled_corpuses, verbose=True)
