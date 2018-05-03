@@ -102,7 +102,7 @@ def adapt_vocab(X_train, X_list):
 class Experiment:
 
     def __init__(self, experiment_dir, input_name2id2np=None, adapt_train_vocab=False,
-                 comments='', epochs=20, patience=4, **kwargs):
+                 comments='', epochs=50, patience=15, **kwargs):
         """
         an experiment class that runs cross validation
         designed to enable easy experiments with combinations of:
@@ -198,7 +198,7 @@ class Experiment:
                                metrics=[macro_f1])
 
             # call backs
-            es = EarlyStopping(patience=self.patience, monitor='macro_f1', verbose=1, mode='max')
+            es = EarlyStopping(patience=self.patience, monitor='val_macro_f1', verbose=1, mode='max')
             weight_dir = self.experiment_dir + str(fold_idx) + '.weight'
             mc = ModelCheckpoint(weight_dir,
                                  save_best_only=True, save_weights_only=True)
