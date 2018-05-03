@@ -1,35 +1,18 @@
 from nn_experiment import Experiment
-from generator_util import simplest_tweet2data
-import pickle as pkl
-'''
-# experiment that is only on the word level
-# without pretraining
+import numpy as np
+
+labeled_tids = np.loadtxt('../data/labeled_tids.np', dtype='int')
+
+
+# this is the variable you need to implement
+# it is a map from component_name to id2np
+# where each id2np is a map from tweet id to an numpy array
+input_name2id2np = {'dummy_splex':
+                    dict([(tid, np.zeros(20, )) for tid in labeled_tids]),
+                    'context_representation':
+                    dict([(tid, np.zeros(320, )) for tid in labeled_tids])}
 options = ['word']
-experiment = Experiment(tweet2data=simplest_tweet2data, experiment_dir='nonpretrained_word',
-                        comments='Before the update on word level, no pretraining', adapt_train_vocab=True,
-                        options=options)
+experiment = Experiment(experiment_dir='test', input_name2id2np=input_name2id2np, adapt_train_vocab=True,
+                            options=options)
 experiment.cv()
-'''
 
-'''
-# experiment that is only on the char level
-# without pretraining
-options = ['char']
-experiment = Experiment(tweet2data=simplest_tweet2data, experiment_dir='nonpretrained_word',
-                        comments='Before the update on word level, no pretraining', adapt_train_vocab=True,
-                        options=options)
-experiment.cv()
-'''
-
-id2rep = pkl.load(open('id2rep.pkl', 'rb'))
-
-def tweet_splex(tweet_dict):
-    r = simplest_tweet2data(tweet_dict)
-    r['context_input'] = id2rep[tweet_dict['tweet_id']]
-    return r
-
-options = ['word', 'context']
-experiment = Experiment(tweet2data=tweet_splex, experiment_dir='toy_context',
-                        comments='toy context, testing whether code runs with context', adapt_train_vocab=True,
-                        options=options, context_dim=3, context_dense_size=32)
-experiment.cv()

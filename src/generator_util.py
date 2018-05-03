@@ -23,8 +23,7 @@ def create_data(input_name2id2np, tweet_dicts, return_generators=False,
 
     Parameters
     ----------
-    tweet2data: a function that maps each tweet dictionary to a data point that is recognizable by keras
-                attributes include input_content, input_context, input_splex, y
+
     tweet_dicts: a list of tweets dictionary
     return_generators: whether (generator, step_size) is returned or (X, y) is returned
 
@@ -53,7 +52,7 @@ def create_data(input_name2id2np, tweet_dicts, return_generators=False,
         result['word_content_input'] = tweet_dict['word_padded_int_arr']
         result['char_content_input'] = tweet_dict['char_padded_int_arr']
         for input_name in input_name2id2np:
-            result[input_name] = input_name2id2np[input_name][tweet_dict['tweet_id']]
+            result[input_name + '_input'] = input_name2id2np[input_name][tweet_dict['tweet_id']]
         if keys is None:
             keys = [key for key in result]
         data.append(result)

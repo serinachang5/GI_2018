@@ -44,6 +44,7 @@ class Data_loader:
             self.char_vocab_size, self.char_max_len = char_vocab_size, char_max_len
             self.vocab_size, self.max_len = None, None
             self.word2property = pkl.load(open('../model/word.pkl', 'rb'))
+            self.char2property = pkl.load(open('../model/char.pkl', 'rb'))
             removed_words = []
             for word in self.word2property:
                 if self.word2property[word]['id'] >= word_vocab_size:
@@ -52,9 +53,9 @@ class Data_loader:
                 del self.word2property[word]
             removed_chars = []
             for char in self.char2property:
-                if self.char2property[word]['id'] >= char_vocab_size:
+                if self.char2property[char]['id'] >= char_vocab_size:
                     removed_chars.append(char)
-            for char in removed_words:
+            for char in removed_chars:
                 del self.char2property[char]
 
         if verbose:
@@ -96,6 +97,8 @@ class Data_loader:
             self.data = pkl.load(open('../data/data.pkl', 'rb'))
         else:
             self.data = pkl.load(open('../data/labeled_data.pkl', 'rb'))
+
+        self.all_tid = set([tid for tid in self.data])
         # pad and trim the int representations of a tweet given the parameters of this Data_loader
         if verbose:
             print('Processing tweets ...')

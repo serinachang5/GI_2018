@@ -6,7 +6,10 @@ import numpy as np
 import subprocess
 from sklearn.metrics import precision_recall_fscore_support
 from keras import backend as K
-from sklearn.metrics import f1_score
+
+nb_classes = 3
+
+labeled_tids = np.loadtxt('../data/labeled_tids.np', dtype='int')
 
 def extract_dim_input_name2id2np(input_name2id2np):
     dim_map = {}
@@ -16,12 +19,55 @@ def extract_dim_input_name2id2np(input_name2id2np):
         for id in id2np:
             if dim is None:
                 dim = id2np[id].shape[0]
-            assert(id2np.shape) == (dim, )
+            assert(id2np[id].shape) == (dim, )
         dim_map[input_name] = dim
+
+        for tid in labeled_tids:
+            assert(tid in id2np)
     return dim_map
 
-def myf1(y_true, y_pred):
-    return f1_score(np.argmax(y_true, axis=-1), np.argmax(y_pred, axis=-1), average='macro')
+def make_onehot(y):
+    y_cat = K.argmax(y, axis=-1)
+    return K.one_hot(y_cat, nb_classes)
+
+# copy pasted from stackoverflow
+# https://stackoverflow.com/questions/43547402/how-to-calculate-f1-macro-in-keras
+def f1(y_true, y_pred):
+    def recall(y_true, y_pred):
+        """Recall metric.
+
+        Only computes a batch-wise average of recall.
+
+        Computes the recall, a metric for multi-label classification of
+        how many relevant items are selected.
+        """
+        true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+        possible_positives = K.sum(K.round(K.clip(y_true, 0, 1)))
+        recall = true_positives / (possible_positives + K.epsilon())
+        return recall
+
+    def precision(y_true, y_pred):
+        """Precision metric.
+
+        Only computes a batch-wise average of precision.
+
+        Computes the precision, a metric for multi-label classification of
+        how many selected items are relevant.
+        """
+        true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+        predicted_positives = K.sum(K.round(K.clip(y_pred, 0, 1)))
+        precision = true_positives / (predicted_positives + K.epsilon())
+        return precision
+    precision = precision(y_true, y_pred)
+    recall = recall(y_true, y_pred)
+    return 2*((precision*recall)/(precision+recall+K.epsilon()))
+
+def macro_f1(y_true, y_pred):
+    y_true, y_pred = make_onehot(y_true), make_onehot(y_pred)
+    f = 0
+    for class_idx in range(nb_classes):
+        f = f + f1(y_true[:,class_idx], y_pred[:,class_idx])
+    return f / nb_classes
 
 # calculating the classweight given the y_train
 # the weight will be inversely proprotional to the label
@@ -55,7 +101,7 @@ def adapt_vocab(X_train, X_list):
 # an experiment class that runs cross validation
 class Experiment:
 
-    def __init__(self, input_name2id2np, experiment_dir, adapt_train_vocab=False,
+    def __init__(self, experiment_dir, input_name2id2np=None, adapt_train_vocab=False,
                  comments='', epochs=20, patience=4, **kwargs):
         """
         an experiment class that runs cross validation
@@ -148,10 +194,11 @@ class Experiment:
             K.clear_session()
             self.kwargs['input_dim_map'] = extract_dim_input_name2id2np(self.input_name2id2np)
             self.model = NN_architecture(**self.kwargs).model
-            self.model.compile(optimizer='adam', loss='categorical_crossentropy')
+            self.model.compile(optimizer='adam', loss='categorical_crossentropy',
+                               metrics=[macro_f1])
 
             # call backs
-            es = EarlyStopping(patience=self.patience, monitor=myf1, verbose=1, mode='max')
+            es = EarlyStopping(patience=self.patience, monitor='macro_f1', verbose=1, mode='max')
             weight_dir = self.experiment_dir + str(fold_idx) + '.weight'
             mc = ModelCheckpoint(weight_dir,
                                  save_best_only=True, save_weights_only=True)

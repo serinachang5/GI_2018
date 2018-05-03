@@ -123,8 +123,10 @@ class NN_architecture:
 
 
         for input_name in self.input_dim_map:
-            last_tensors.append(Input(shape=(self.input_dim_map[input_name],),
-                                      name=input_name + '_input'))
+            input = Input(shape=(self.input_dim_map[input_name],),
+                                      name=input_name + '_input')
+            inputs.append(input)
+            last_tensors.append(input)
 
         if len(last_tensors) >= 2:
             concatenated_rep = concatenate(last_tensors)
