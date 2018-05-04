@@ -74,24 +74,6 @@ def create_clf_data(input_name2id2np, tr_test_val_dicts, return_generators=False
             create_data(input_name2id2np, val, return_generators=return_generators, batch_size=batch_size, sample=False),
             create_data(input_name2id2np, test, return_generators=return_generators, batch_size=batch_size, sample=False))
 
-# an example of tweet2data
-# takes in a tweet dictionary
-# returns a dictionary that has key - value
-# where keys are arguments recognizable by the model (matches input layer name)
-# and values are corresponding numpy arrays
-def simplest_tweet2data(tweet_dict):
-    result = {}
-    one_hot_labels = np.eye(3)
-    if tweet_dict['label'] == 'Aggression':
-        result['y'] = one_hot_labels[0]
-    elif tweet_dict['label'] == 'Loss':
-        result['y'] = one_hot_labels[1]
-    else:
-        result['y'] = one_hot_labels[2]
-    result['word_content_input'] = tweet_dict['word_padded_int_arr']
-    result['char_content_input'] = tweet_dict['char_padded_int_arr']
-    return result
-
 if __name__ == '__main__':
     from data_loader import Data_loader
     option = 'word'
@@ -102,7 +84,9 @@ if __name__ == '__main__':
     data_fold = dl.cv_data(fold_idx)
     tr, val, test = data_fold
     print(tr[0])
+    '''
     (X_train, y_train), (X_val, y_val), (X_test, y_test) = create_clf_data(simplest_tweet2data,
                                                                            data_fold)
     for key in X_train:
         print(X_train[key])
+    '''

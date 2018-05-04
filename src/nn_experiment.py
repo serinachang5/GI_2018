@@ -11,6 +11,13 @@ nb_classes = 3
 
 labeled_tids = np.loadtxt('../data/labeled_tids.np', dtype='int')
 
+def print_result_from_dir(dir_name):
+    result = np.loadtxt('../experiments/' + dir_name)
+
+
+
+
+
 def extract_dim_input_name2id2np(input_name2id2np):
     dim_map = {}
     for input_name in input_name2id2np:

@@ -3,17 +3,29 @@ from keras.layers import Input, Dense, Conv1D, Embedding, concatenate, \
 from keras.models import Model
 import pandas as pd
 import numpy as np
+from scipy import stats
+
+# given a numpy array that encodes the result
+# print the classification statistics
+def print_results_from_np(result_np):
+    print(np2df(result_np))
 
 # print the results from a directory
 def print_results_from_dir(dir_name):
+    print('--------------------------')
+    print('directory name %s' % dir_name)
     fold_result = np.loadtxt('../experiments/' + dir_name + '/result_by_fold.np')
     fold_result = np.reshape(fold_result, (-1, 4, 3))
+    '''
     for idx in range(len(fold_result)):
         print('results for fold %d.' % (idx + 1))
         print_results_from_np(fold_result[idx])
+    '''
     print('Mean for each entry')
     print_results_from_np(np.mean(fold_result, axis=0))
+    print('Standard deviation for each entry')
     print_results_from_np(np.std(fold_result, axis=0))
+    print('--------------------------')
 
 def np2df(result_np):
     result_np = result_np.T
@@ -21,10 +33,29 @@ def np2df(result_np):
     df = pd.DataFrame(d)
     return df
 
-# given a numpy array that encodes the result
-# print the classification statistics
-def print_results_from_np(result_np):
-    print(np2df(result_np))
+def get_fold_macro_f(dir_name):
+    fold_result = np.loadtxt('../experiments/' + dir_name + '/result_by_fold.np')
+    fold_result = np.reshape(fold_result, (-1, 4, 3))
+    macrof1 = np.mean(fold_result[:, 2, :], axis=-1)
+    return macrof1
+
+def compare_dirs(dir1, dir2):
+    print_results_from_dir(dir1)
+    print_results_from_dir(dir2)
+    mf1, mf2 = get_fold_macro_f(dir1), get_fold_macro_f(dir2)
+    alpha = stats.ttest_rel(mf1, mf2)
+    print('macro-f1 score achieved by each fold for %s' % dir1)
+    print(mf1)
+    print('macro-f1 score achieved by each fold for %s' % dir2)
+    print(mf2)
+    print('%s averaged macro-f1 score = %.3f' % (dir1, np.mean(mf1)))
+    print('%s averaged macro-f1 score = %.3f' % (dir2, np.mean(mf2)))
+    print(alpha)
+    return alpha
+
+
+compare_dirs('no_pretrain_wordpchar', 'no_pretrain_char')
+exit(0)
 
 # returns two tensors
 # one for input_content, the other for tensor before final classification
