@@ -2,6 +2,7 @@ from keras.layers import Input, Dense, Conv1D, Embedding, concatenate, \
     GlobalMaxPooling1D, Dropout
 from keras.models import Model
 import pandas as pd
+import numpy as np
 
 # print the results from a directory
 def print_results_from_dir(dir_name):
@@ -9,18 +10,21 @@ def print_results_from_dir(dir_name):
     fold_result = np.reshape(fold_result, (-1, 4, 3))
     for idx in range(len(fold_result)):
         print('results for fold %d.' % (idx + 1))
-        print_results_from_np(r)
+        print_results_from_np(fold_result[idx])
     print('Mean for each entry')
     print_results_from_np(np.mean(fold_result, axis=0))
     print_results_from_np(np.std(fold_result, axis=0))
 
-# given a numpy array that encodes the result
-# print the classification statistics
-def print_results_from_np(result_np):
+def np2df(result_np):
     result_np = result_np.T
     d = [{'precision': r[0], 'recall': r[1], 'f-score': r[2], 'support': r[3]} for r in result_np]
     df = pd.DataFrame(d)
-    print(df)
+    return df
+
+# given a numpy array that encodes the result
+# print the classification statistics
+def print_results_from_np(result_np):
+    print(np2df(result_np))
 
 # returns two tensors
 # one for input_content, the other for tensor before final classification
@@ -57,7 +61,7 @@ class NN_architecture:
                  options,
                  input_dim_map,
                  word_vocab_size=40000, word_max_len=50,
-                 char_vocab_size=1000, char_max_len=150,
+                 char_vocab_size=1200, char_max_len=150,
                  drop_out=0.5,
                  filter=200, dense_size=256, embed_dim=300, kernel_range=range(1,6),
                  pretrained_weight_dir=None, weight_in_keras=None):
