@@ -1,3 +1,14 @@
+"""
+===================
+create_vocab
+===================
+Author: Ruiqi Zhong
+Date: 05/042018
+This module implements a function that would take in the labeled and unlabeld corpus
+and create a data.pkl that stores all the data
+"""
+
+
 from sentence_tokenizer import int_array_rep
 import pandas as pd
 from dateutil import parser

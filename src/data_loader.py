@@ -24,7 +24,7 @@ class Data_loader:
 
     def __init__(self, vocab_size = 40000, max_len = 50,
                  word_vocab_size = 40000, word_max_len = 50,
-                 char_vocab_size = 1000, char_max_len = 150,
+                 char_vocab_size = 1200, char_max_len = 150,
                  option = 'word', verbose = True, load_tweet = True,
                  labeled_only = False,
                  **kwargs):

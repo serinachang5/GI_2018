@@ -1,34 +1,29 @@
+"""
+===================
+model_def
+===================
+Author: Ruiqi Zhong
+Date: 05/04/2018
+This module includes a model class s.t. each component is exactly the same as the previous ACL paper
+nevertheless, it allows combination of different models (concatenated at the last layer)
+"""
+
+
 from keras.layers import Input, Dense, Conv1D, Embedding, concatenate, \
     GlobalMaxPooling1D, Dropout
 from keras.models import Model
-import pandas as pd
-
-# print the results from a directory
-def print_results_from_dir(dir_name):
-    fold_result = np.loadtxt('../experiments/' + dir_name + '/result_by_fold.np')
-    fold_result = np.reshape(fold_result, (-1, 4, 3))
-    for idx in range(len(fold_result)):
-        print('results for fold %d.' % (idx + 1))
-        print_results_from_np(r)
-    print('Mean for each entry')
-    print_results_from_np(np.mean(fold_result, axis=0))
-    print_results_from_np(np.std(fold_result, axis=0))
-
-# given a numpy array that encodes the result
-# print the classification statistics
-def print_results_from_np(result_np):
-    result_np = result_np.T
-    d = [{'precision': r[0], 'recall': r[1], 'f-score': r[2], 'support': r[3]} for r in result_np]
-    df = pd.DataFrame(d)
-    print(df)
 
 # returns two tensors
 # one for input_content, the other for tensor before final classification
 def content2rep(option, vocab_size, max_len, drop_out=0.5,
                 filter=200, dense_size=256, embed_dim=300,
                 kernel_range=(1,6)):
+
+    # input layer
     input_content = Input(shape=(max_len,),
                           name= option + '_content_input')
+
+    # embedding layer
     embed_layer = Embedding(vocab_size, embed_dim, input_length=max_len,
                             name= option + '_embed')
     e_i = embed_layer(input_content)
@@ -51,18 +46,20 @@ def content2rep(option, vocab_size, max_len, drop_out=0.5,
 
     return input_content, content_rep
 
+
 class NN_architecture:
 
     def __init__(self,
                  options,
                  input_dim_map,
                  word_vocab_size=40000, word_max_len=50,
-                 char_vocab_size=1000, char_max_len=150,
+                 char_vocab_size=1200, char_max_len=150,
                  drop_out=0.5,
                  filter=200, dense_size=256, embed_dim=300, kernel_range=range(1,6),
                  pretrained_weight_dir=None, weight_in_keras=None):
         """
         Initilizing a neural network architecture according to the specification
+        access the actual model by self.model
 
         Parameters
         ----------
@@ -71,6 +68,7 @@ class NN_architecture:
                     for each option, the input is mapped to a lower dimension,
                     then the lower dimension representation of each option is concatenated
                     and is followed by the final classification layer
+        input_dim_map: a map from additional input name to its dimension
         word_vocab_size: number of word level vocabs to be considered
         word_max_len: number of words in a tweet sentence
         char_vocab_size: number of char level vocabs to be considered
@@ -87,12 +85,15 @@ class NN_architecture:
         """
         self.options = options
         self.input_dim_map = input_dim_map
+
         # changeable hyper parameter
         self.drop_out = drop_out
         self.word_vocab_size, self.word_max_len = word_vocab_size, word_max_len
         self.char_vocab_size, self.char_max_len = char_vocab_size, char_max_len
+
         # hyper parameters that is mostly fixed
         self.filter, self.dense_size, self.embed_dim, self.kernel_range = filter, dense_size, embed_dim, kernel_range
+
         # pretrained_weight directory
         self.pretrained_weight_dirs, self.weight_in_keras = pretrained_weight_dir, weight_in_keras
         if self.pretrained_weight_dirs is None:
@@ -118,39 +119,33 @@ class NN_architecture:
                                                              self.filter, self.dense_size, self.embed_dim, self.kernel_range)
                 inputs.append(input_content)
                 last_tensors.append(content_rep)
-                self.load_pretrained_weights(input_content, content_rep,
-                                             self.pretrained_weight_dirs.get(option), self.weight_in_keras.get(option))
+                """TODO: Implement load weights here"""
 
-
+        # directly concatenate addtional inputs (such as splex scores and context representations)
+        # to the last layer
         for input_name in self.input_dim_map:
             input = Input(shape=(self.input_dim_map[input_name],),
                                       name=input_name + '_input')
             inputs.append(input)
             last_tensors.append(input)
 
+        # concatenate all the representations
         if len(last_tensors) >= 2:
             concatenated_rep = concatenate(last_tensors)
         else:
             concatenated_rep = last_tensors[0]
 
+        # out layer
         self.out_layer = Dense(3, activation='softmax',
                                name='classification')
-
         out = self.out_layer(concatenated_rep)
         self.model = Model(inputs=inputs, outputs=out)
         self.model.summary()
-
-    # loading the pretrained weight that from input to second last layer
-    def load_pretrained_weights(self, input_content, content_rep, weight_dir, weight_in_keras):
-        if weight_dir is not None and weight_in_keras:
-            out = Dense(3)(content_rep)
-            _model_ = Model(inputs=input_content, outputs=out)
-            _model_.load_weights(self.pretrained_weight_dir)
 
 if __name__ == '__main__':
     options = ['char', 'word']
     nn = NN_architecture(options,
                          word_vocab_size=40000, word_max_len=50,
-                         char_vocab_size=1000, char_max_len=150,
+                         char_vocab_size=1200, char_max_len=150,
                          context_dim=300, context_dense_size=256,
                          pretrained_weight_dir=None, weight_in_keras=None)
