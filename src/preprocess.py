@@ -28,7 +28,6 @@ excluded = set([b'\xf0\x9f\x8f\xbc',
                 b'\xe2\x99\x82',
                 b'\xe2\x80\x8d'])
 
-
 def extract_mentioned_user_name(s):
     s = str(s)
     if len(s) <= 2:
