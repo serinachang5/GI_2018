@@ -1,3 +1,14 @@
+"""
+===================
+nn_experiment
+Author: Ruiqi Zhong
+Date: 05/04/2018
+contains the Experiment class
+A high level API that enables different experiment configurations
+that require the minimum implementation
+===================
+"""
+
 from keras.callbacks import EarlyStopping, ModelCheckpoint
 from model_def import NN_architecture
 from data_loader import Data_loader
@@ -7,17 +18,17 @@ import subprocess
 from sklearn.metrics import precision_recall_fscore_support
 from keras import backend as K
 
+# number of classes we are performing classification task
+# currently 3
 nb_classes = 3
 
+# all the labeled ids
 labeled_tids = np.loadtxt('../data/labeled_tids.np', dtype='int')
 
-def print_result_from_dir(dir_name):
-    result = np.loadtxt('../experiments/' + dir_name)
 
-
-
-
-
+# extracting the dimension for each input name
+# also assert that all the input from the same input name has the same dimension
+# and that for each key input_name2id2np contains mapping from every labeled tweet
 def extract_dim_input_name2id2np(input_name2id2np):
     dim_map = {}
     for input_name in input_name2id2np:
@@ -26,17 +37,21 @@ def extract_dim_input_name2id2np(input_name2id2np):
         for id in id2np:
             if dim is None:
                 dim = id2np[id].shape[0]
+            # asserting the dimension for the same key across all tweets is the same
             assert(id2np[id].shape) == (dim, )
         dim_map[input_name] = dim
 
+        # asserting that labeled tweets has a corresponding input
         for tid in labeled_tids:
             assert(tid in id2np)
     return dim_map
 
+# making the predicted label one hot
 def make_onehot(y):
     y_cat = K.argmax(y, axis=-1)
     return K.one_hot(y_cat, nb_classes)
 
+# f1-score implementation for keras (for binary classification)
 # copy pasted from stackoverflow
 # https://stackoverflow.com/questions/43547402/how-to-calculate-f1-macro-in-keras
 def f1(y_true, y_pred):
@@ -69,6 +84,7 @@ def f1(y_true, y_pred):
     recall = recall(y_true, y_pred)
     return 2*((precision*recall)/(precision+recall+K.epsilon()))
 
+# calculate the f score based on the Keras implementation
 def macro_f1(y_true, y_pred):
     y_true, y_pred = make_onehot(y_true), make_onehot(y_pred)
     f = 0
@@ -90,17 +106,24 @@ def calculate_class_weight(y_train):
 # we need to adjust the vocabulary size for all the content input
 # mapping every word that occurs less than twice in the training set to 1
 def adapt_vocab(X_train, X_list):
+    threshold = 2
+
     for key in X_train:
         if key in [option + '_content_input' for option in ['char', 'word']]:
-            threshold = 2
+
+            # count the number of occurence fo each word
             wc = {}
             for xs in X_train[key]:
                 for x in xs:
                     if wc.get(x) is None:
                         wc[x] = 0
                     wc[x] += 1
+
+            # define a filter here
             def f(x):
                 return x if (wc.get(x) is not None and wc[x] >= threshold) else 1
+
+            # applying the filter to all x
             X_train[key] = np.array([[f(x) for x in xs] for xs in X_train[key]])
             for X in X_list:
                 X[key] = np.array([[f(x) for x in xs] for xs in X[key]])
@@ -182,6 +205,9 @@ class Experiment:
         self.dl = Data_loader(option='both', labeled_only=True, **kwargs)
         self.epochs, self.patience = epochs, patience
 
+    # cross validation
+    # write all results to the directory
+    # see read_results for retrieving the performance
     def cv(self):
         results = []
 
