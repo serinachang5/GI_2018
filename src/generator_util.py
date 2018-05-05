@@ -68,6 +68,11 @@ def create_data(input_name2id2np, tweet_dicts, return_generators=False,
     step_size = len(X) / batch_size
     return generator, step_size
 
+
+# takes in tr, val, test, each of it a list of dictionaries
+# besides basic y and word/char level input
+# sets the input field by input_name2id2np
+# create the cv fold of data for tr, val, test
 def create_clf_data(input_name2id2np, tr_test_val_dicts, return_generators=False, batch_size=32):
     tr, val, test = tr_test_val_dicts
     return (create_data(input_name2id2np, tr, return_generators=return_generators, batch_size=batch_size, sample=True),
