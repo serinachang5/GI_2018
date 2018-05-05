@@ -229,4 +229,4 @@ if __name__ == '__main__':
     # write_reps_to_file(emb_type='splex', rep_modes=modes)
     # check_written_embeddings(emb_type='splex', rep_mode='avg')
 
-    test_TL('d2v')
+    test_TL('w2v')

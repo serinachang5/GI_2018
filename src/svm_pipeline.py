@@ -18,6 +18,10 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.svm import SVC
 
+# initialize data_loader
+print('Initializing Data Loader')
+dl = Data_loader()
+
 def init_models(dl):
     models = {}
 
@@ -50,13 +54,12 @@ def init_TL(emb_type, tweet_dict):
         if args['use_d2v']:
             tl = TweetLevel(emb_file='../data/d2v_word_s300_w5_mc5_ep20.mdl', tweet_dict=tweet_dict)
         else:
-            tl = TweetLevel(emb_file='../data/w2v_word_s300_w5_mc5_it20.bin', tweet_dict=tweet_dict)
-    elif emb_type == 'splex':
-        scaling = args['splex_scale']
-        assert(scaling == 'minmax' or scaling == 'standard' or scaling == 'balanced_minmax')
-        tl = TweetLevel(emb_file='../data/splex_' + scaling + '_svd_word_s300_seeds_hc.pkl', tweet_dict=tweet_dict)
+            tl = TweetLevel(emb_file='../data/w2v_word_s300_w5_mc5_ep20.bin', tweet_dict=tweet_dict)
     else:
-        tl = TweetLevel(emb_file='../data/d2v_word_s300_w5_mc5_ep20.mdl', tweet_dict=tweet_dict)
+        scaling = args['splex_scale']
+        valid_scaling = ['minmax', 'standard', 'balanced_minmax', 'balanced_standard']
+        assert(scaling in valid_scaling)
+        tl = TweetLevel(emb_file='../data/splex_' + scaling + '_svd_word_s300_seeds_hc.pkl', tweet_dict=tweet_dict)
     return tl
 
 def init_CL(emb_type, data_loader, user_history):
@@ -169,7 +172,7 @@ def print_scores(per_class, verbose=True):
         print()
     print('AVG MACRO F1:', round(avg_mac_f/len(per_class), 5))
 
-def main(args):
+def run_experiment(args):
     # check representation specifications
     specs = []
     if args['include_unigrams']:
@@ -201,13 +204,6 @@ def main(args):
     else:
         specs.append('tst')
 
-    # initialize data_loader
-    max_len = 53
-    vocab_size = 30000
-    option = 'word'
-    print('Initializing Data Loader')
-    dl = Data_loader(vocab_size=vocab_size, max_len=max_len, option=option)
-
     # initialize representation models
     models = init_models(dl)
 
@@ -220,18 +216,52 @@ def main(args):
         pickle.dump((args, cv_scores), f)
     print('Args and cross-val scores saved to', out_file)
 
+# unigrams, word2vec, all versions of SPLex scaling
+def test_tl_combos(args):
+    args['include_unigrams'] = True
+    args['include_w2v_tl'] = False
+    args['include_splex_tl'] = False
+    args['include_w2v_cl'] = False
+    args['include_splex_cl'] = False
+    run_experiment(args)  # only unigrams
+
+    args['include_splex_tl'] = True
+    args['splex_scale'] = 'minmax'
+    run_experiment(args)  # unigrams + splex minmax
+    args['splex_scale'] = 'standard'
+    run_experiment(args)  # unigrams + splex standard
+    args['splex_scale'] = 'balanced_minmax'
+    run_experiment(args)  # unigrams + splex balanced minmax
+    args['splex_scale'] = 'balanced_standard'
+    run_experiment(args)  # unigrams + splex balanced standard
+
+    args['include_unigrams'] = False
+    args['include_w2v_tl'] = True
+    args['include_splex_tl'] = False
+    run_experiment(args)  # only w2v
+
+    args['include_splex_tl'] = True
+    args['splex_scale'] = 'minmax'
+    run_experiment(args)  # w2v + splex minmax
+    args['splex_scale'] = 'standard'
+    run_experiment(args)  # w2v + splex standard
+    args['splex_scale'] = 'balanced_minmax'
+    run_experiment(args)  # w2v + splex balanced minmax
+    args['splex_scale'] = 'balanced_standard'
+    run_experiment(args)  # w2v + splex balanced standard
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description = '')
-    parser.add_argument('-iu', '--include_unigrams', type = bool, default = False, help = 'whether to include unigrams')
+    parser.add_argument('-iu', '--include_unigrams', type = bool, default = True, help = 'whether to include unigrams')
     parser.add_argument('-usize', '--unigram_size', type = int, default = 10000, help = 'number of unigrams to include')
 
-    parser.add_argument('-iwt', '--include_w2v_tl', type = bool, default = True, help = 'whether to include w2v embeddings at tweet-level; if false, w2v-tweet params are ignored')
+    parser.add_argument('-iwt', '--include_w2v_tl', type = bool, default = False, help = 'whether to include w2v embeddings at tweet-level; if false, w2v-tweet params are ignored')
     parser.add_argument('-d2v', '--use_d2v', type = bool, default = False, help = 'use doc2vec instead of aggregated w2v embedding for tweet-level')
     parser.add_argument('-wtmode', '--w2v_tl_mode', type = str, default = 'avg', help = 'how to combine w2v embeddings at tweet-level')
 
     parser.add_argument('-ist', '--include_splex_tl', type = bool, default = True, help = 'whether to include splex at tweet-level')
-    parser.add_argument('-stscale', '--splex_scale', type = str, default = 'minmax', help = 'which scaling of splex to use')
+    parser.add_argument('-stscale', '--splex_scale', type = str, default = 'standard', help = 'which scaling of splex to use')
     parser.add_argument('-isub', '--include_sub_splex_tl', type = bool, default = False, help = 'whether to include splex substance use scores at tweet-level')
     parser.add_argument('-stmode', '--splex_tl_mode', type = str, default = 'sum', help = 'how to combine splex scores into tweet-level')
 
@@ -256,4 +286,4 @@ if __name__ == '__main__':
     args = vars(parser.parse_args())
     print(args)
 
-    main(args)
+    test_tl_combos(args)

@@ -62,7 +62,7 @@ def generate_svd_embs(sentences, option):
 
 def get_ppmi(sentences):
 	vocab = [str(idx) for idx in range(1,20001)]
-	count_model = CountVectorizer(vocabulary=vocab)  # get top 20k indices
+	count_model = CountVectorizer(vocabulary=vocab, token_pattern='\d+')  # get top 20k indices
 	counts = count_model.fit_transform(sentences)
 	counts.data = np.fmin(np.ones(counts.data.shape), counts.data)  # want occurence, not count
 	n,v = counts.shape  # n is num of docs, v is vocab size
@@ -149,11 +149,9 @@ def sample_usage(fname, mode):
 
 def main(args):
 	# params for data loader
-	max_len = 53
-	vocab_size = 30000
 	option = args['option']
 	print('Initializing Data Loader')
-	dl = Data_loader(vocab_size=vocab_size, max_len=max_len, option=option)
+	dl = Data_loader(option=option)
 
 	mode = args['mode']
 	assert(mode == 'w2v' or mode == 'svd' or mode == 'd2v')
