@@ -169,7 +169,7 @@ class Data_loader:
 
     # convert an int array to the unicode representation
     def convert2unicode(self, int_arr):
-        return self.separator.join([str(self.id2token[id]) for id in int_arr])
+        return self.separator.join([self.id2token[id].decode() for id in int_arr])
 
     def print_recovered_tweet(self, tweet_property):
         for key in tweet_property:

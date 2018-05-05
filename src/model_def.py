@@ -15,7 +15,7 @@ from keras.models import Model
 
 # returns two tensors
 # one for input_content, the other for tensor before final classification
-def content2rep(option, vocab_size, max_len, drop_out=0.5,
+def content2rep(option='word', vocab_size=40000, max_len=50, drop_out=0.5,
                 filter=200, dense_size=256, embed_dim=300,
                 kernel_range=(1,6)):
 
@@ -51,7 +51,7 @@ class NN_architecture:
 
     def __init__(self,
                  options,
-                 input_dim_map,
+                 input_dim_map=None,
                  word_vocab_size=40000, word_max_len=50,
                  char_vocab_size=1200, char_max_len=150,
                  drop_out=0.5,
@@ -84,6 +84,8 @@ class NN_architecture:
         weight_in_keras: whether the weight is in Keras
         """
         self.options = options
+        if input_dim_map is None:
+            input_dim_map = {}
         self.input_dim_map = input_dim_map
 
         # changeable hyper parameter
