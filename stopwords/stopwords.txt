@@ -263,7 +263,7 @@ youd
 youll
 youre
 youve
-__UNK__
-__USER_HANDLE__
-__RT__
-__URL__
+_UNKNOWN_
+@user
+!url
+_PAD_
