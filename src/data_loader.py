@@ -9,7 +9,10 @@ Date: 04/21/2018
 This module contains a class that will provide most functionalities needed for tokenizing and preprocessing
 """
 import pickle as pkl
+from collections import defaultdict
 from sentence_tokenizer import int_array_rep
+import numpy as np
+
 
 class Data_loader:
     """
@@ -19,11 +22,11 @@ class Data_loader:
     each datapoint/tweet is a dictionary
     """
 
-    def __init__(self, vocab_size=40000, max_len=50,
-                 word_vocab_size=40000, word_max_len=50,
-                 char_vocab_size=1200, char_max_len=150,
-                 option='word', verbose=True, load_tweet=True,
-                 labeled_only=False,
+    def __init__(self, vocab_size = 40000, max_len = 50,
+                 word_vocab_size = 40000, word_max_len = 50,
+                 char_vocab_size = 1200, char_max_len = 150,
+                 option = 'word', verbose = True, load_tweet = True,
+                 labeled_only = False,
                  **kwargs):
         if verbose:
             print('Data loader ...')
@@ -38,7 +41,7 @@ class Data_loader:
         self.option, self.vocab_size, self.max_len = option, vocab_size, max_len
         assert(option in ['both', 'char', 'word'])
         if option in ['char', 'word']:
-           self.word_vocab_size, self.word_max_len, self.char_vocab_size, self.char_max_len = [None] * 4
+            self.word_vocab_size, self.word_max_len, self.char_vocab_size, self.char_max_len = [None] * 4
         else:
             self.word_vocab_size, self.word_max_len = word_vocab_size, word_max_len
             self.char_vocab_size, self.char_max_len = char_vocab_size, char_max_len
@@ -61,26 +64,28 @@ class Data_loader:
         if verbose:
             print('Loading vocabulary ...')
         if option != 'both':
-            self.token2property = pkl.load(open('../model/' + option + '.pkl', 'rb')) # loading the preprocessed token file
+            self.token2property = pkl.load(open('../model/' + option + '.pkl', 'rb'))  # loading the preprocessed token file
             removed_tokens = []
             for token in self.token2property:
                 if self.token2property[token]['id'] >= vocab_size:
                     removed_tokens.append(token)
             for token in removed_tokens:
                 del self.token2property[token]
-            self.separator = ' ' if option == 'word' else '' # chars are not seperated, words are by spaces
-        if option == 'word': # creating an id2wtoken dictionary
+            self.separator = ' ' if option == 'word' else ''  # chars are not seperated, words are by spaces
+        if option == 'word':  # creating an id2wtoken dictionary
             self.id2token = dict([(self.token2property[word]['id'], word) for word in self.token2property])
+            self.token2id = {v.decode('utf8'):k for k, v in self.id2token.items()}
         elif option == 'char':
             self.id2token = dict([(self.token2property[c]['id'], chr(c) if bytes(c) < bytes(256) else c)
                                   for c in self.token2property])
+            self.token2id = {v.decode('utf8'):k for k, v in self.id2token.items()}
 
         if verbose and option != 'both':
             print('%d vocab is considered.' % min(len(self.id2token), self.vocab_size))
         else:
             print('%d word, max_len %d.' % (word_vocab_size, word_max_len))
             print('%d char, max_len %d.' % (char_vocab_size, char_max_len))
-        
+
         '''
         # loading user information
         self.user2property = pkl.load(open('../model/user.pkl', 'rb'))
@@ -125,6 +130,27 @@ class Data_loader:
                          self.get_records_by_idxes(cv_ind['test_ind']))
         return tr, val, test
 
+    def filter_by_length(self, tweets, min_len, padded, labeled):
+        X = []
+        y = []
+        for tweet_dict in tweets:
+            if len(tweet_dict['int_arr']) < min_len:
+                continue
+            if labeled:
+                y.append(tweet_dict['label'])
+            if padded:
+                X.append(tweet_dict['padded_int_arr'])
+            else:
+                X.append(tweet_dict['int_arr'])
+        return np.asarray(X), np.asarray(y)
+
+    def cv_data_as_arrays(self, fold_idx, min_len, padded):
+        tr, val, test = self.cv_data(fold_idx)
+        X_tr, y_tr = self.filter_by_length(tr, min_len, padded, True)
+        X_val, y_val = self.filter_by_length(val, min_len, padded, True)
+        X_test, y_test = self.filter_by_length(test, min_len, padded, True)
+        return X_tr, y_tr, X_val, y_val, X_test, y_test
+
     # retrieving data for ensemble
     # similar to cv_data function
     def ensemble_data(self):
@@ -143,10 +169,16 @@ class Data_loader:
         return [self.get_records_by_idxes(tids) for tids in [self.data['unlabeled_tr'],
                                                              self.data['unlabeled_val']]]
 
+    def unlabeled_tr_val_as_arrays(self, min_len, padded):
+        unld_tr, unld_val = self.unlabeled_tr_val()
+        unld_tr_X, _ = self.filter_by_length(unld_tr, min_len, padded, False)
+        unld_val_X, _ = self.filter_by_length(unld_val, min_len, padded, False)
+        return unld_tr_X, unld_val_X
+
     # tokenize a string and convert it to int representation given the parameters of this data loader
     def convert2int_arr(self, s):
         assert(self.option in ['char', 'word'])
-        int_arr = int_array_rep(str(s), option=self.option, vocab_count=self.vocab_size)
+        int_arr = int_array_rep(str(s), option = self.option, vocab_count = self.vocab_size)
         # int_arr = self.pad_int_arr(int_arr)
         return int_arr
 
@@ -202,14 +234,14 @@ class Data_loader:
             record['char_padded_int_arr'] = self.pad_int_arr(record['char_int_arr'], self.char_max_len)[:]
             self.trim2vocab_size(record['char_padded_int_arr'], self.char_vocab_size)
 
-    def pad_int_arr(self, int_arr, max_len=None):
+    def pad_int_arr(self, int_arr, max_len = None):
         int_arr = int_arr[:]
         if max_len is None:
             max_len = self.max_len
         int_arr += [0] * max_len
         return int_arr[:max_len]
 
-    def trim2vocab_size(self, int_arr, vocab_size=None):
+    def trim2vocab_size(self, int_arr, vocab_size = None):
         if vocab_size is None:
             vocab_size = self.vocab_size
         for idx in range(len(int_arr)):
@@ -219,18 +251,62 @@ class Data_loader:
     def get_records_by_idxes(self, idxes):
         return [self.data['data'][idx] for idx in idxes]
 
+    def get_label2idx(self):
+        fold_idx = 0
+        tr, _, _ = self.cv_data(fold_idx)
+        labels = set()
+        for tweet in tr:
+            labels.add(tweet['label'])
+        labels = list(labels)
+        labels.sort()
+        label2idx = {}
+        for idx, label in enumerate(labels):
+            label2idx[label] = idx
+        return label2idx
+
+    def get_class_weights(self):
+
+        fold_idx = 0
+        tr, _, _ = self.cv_data(fold_idx)
+
+        label2count = defaultdict(int)
+        for tweet in tr:
+            label2count[tweet['label']] += 1
+
+        class_weights = {}
+        total = 0.0
+        for cls in label2count.keys():
+            total += (float(1) / label2count[cls])
+
+        if total <= 0.0:
+            return None
+
+        K = float(1) / total
+
+        for cls in label2count.keys():
+            class_weights[cls] = (K / label2count[cls])
+
+        return class_weights
+
+    def get_freq_counts(self):
+        counts = defaultdict(float)
+        for token in self.token2property:
+            counts[token.decode('utf8')] += self.token2property[token]['occurence_in_labeled'] + self.token2property[token]['occurence_in_unlabeled']
+        return counts
+
     def __getitem__(self, tweet_id):
         return self.data['data'][tweet_id]
+
 
 if __name__ == '__main__':
     debug_option = 'labeled_only'
 
     if debug_option == 'tokenizer_only':
-        dl = Data_loader(vocab_size=40000, max_len=150, option='word', load_tweet=False)
+        dl = Data_loader(vocab_size = 40000, max_len = 150, option = 'word', load_tweet = False)
         print(dl.convert2int_arr('fake niggas get extorted 💯'))
 
     elif debug_option == 'data_loader':
-        dl = Data_loader(vocab_size=40000, max_len=150, option='word')
+        dl = Data_loader(vocab_size = 40000, max_len = 150, option = 'word')
         fold_idx = 0
         tr, val, test = dl.cv_data(fold_idx)
         for idx in range(10):
@@ -245,7 +321,7 @@ if __name__ == '__main__':
         print(dl[423325236696580096])
 
     elif debug_option == 'labeled_only':
-        dl = Data_loader(vocab_size=40000, max_len=150, option='both', labeled_only=True)
+        dl = Data_loader(vocab_size = 40000, max_len = 150, option = 'both', labeled_only = True)
         fold = 5
         for fold_idx in range(fold):
             tr, val, test = dl.cv_data(fold_idx)
