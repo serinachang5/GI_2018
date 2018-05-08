@@ -32,7 +32,7 @@ def test_clf(sess, model, args, corpus):
             _, probabilities = dev_step(sess, model, x_batch, y_batch)
             test_probabilities.extend(probabilities)
 
-    print(classification_report(y_test, np.argmax(test_probabilities, axis = 1), target_names = corpus.class_names))
+    print(classification_report(y_test, np.argmax(test_probabilities, axis = 1), target_names = corpus.class_names, digits=4))
 
 def main(args):
 

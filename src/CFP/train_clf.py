@@ -234,7 +234,15 @@ def main(args):
                         )
 
         if pw is not None:
-            args['pretrained_weights'] = os.path.join(pw, 'lm_runs_' + str(fold_idx), 'checkpoints', 'model-29892')#'model-29892.index')
+            suffix = 'model-29892'
+            prefix = os.path.join(pw, 'lm_runs_' + str(fold_idx), 'checkpoints')
+
+            for f in os.listdir(prefix):
+                if f.startswith('model-'):
+                    suffix = f.split('.')[0]
+                    break
+            
+            args['pretrained_weights'] = os.path.join(prefix, suffix)
 
         args['fold_idx'] = fold_idx
         print ('Running fold: %d' % (fold_idx))
