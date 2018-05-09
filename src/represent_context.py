@@ -101,7 +101,6 @@ class Contextifier:
         print('Context combine:', self.context_combine)
         print('Tweet-level combine:', self.tl_combine)
         print('Post types:', self.post_types)
-        print('Size of cache:', len(self.cache))
 
 
     def assemble_context(self, all_data):
