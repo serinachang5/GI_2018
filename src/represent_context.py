@@ -2,7 +2,7 @@
 ===================
 represent_tweet_level.py
 ===================
-Authors: Ethan Adams
+Authors: Ethan Adams and Serina Chang
 Date: 04/27/2018
 Generate and write context embeddings.
 """
@@ -56,27 +56,44 @@ class Contextifier:
 
         self.tweet_to_ct = {} # To allow for loading from files
 
+        # storage for quick access, provided settings stay the same - good for cross-val
+        # these are not static contexts like those from files, so cache needs be emptied
+        # every time settings are changed
+        self.cache = {}
 
+
+    def empty_cache(self):
+        self.cache = {}
 
     def set_post_types(self, post_types):
-        self.post_types = []
-        for p in post_types:
-            if p not in self.POST_TYPES:
-                raise ValueError('Unrecognized post type:', p)
-            self.post_types.append(p)
+        if not hasattr(self, 'post_types') or post_types != self.post_types:
+            self.empty_cache()
+            self.post_types = []
+            for p in post_types:
+                if p not in self.POST_TYPES:
+                    raise ValueError('Unrecognized post type:', p)
+                self.post_types.append(p)
 
     def set_context_size(self, context_size):
-        self.context_size = context_size
+        if not hasattr(self, 'context_size') or context_size != self.context_size:
+            self.empty_cache()
+            self.context_size = context_size
 
     def set_context_hl_ratio(self, context_hl_ratio):
-        self.context_hl_ratio = context_hl_ratio
-        self.decay_rate = 0.5 # hardcoded!
+        if not hasattr(self, 'context_hl_ratio') or context_hl_ratio != self.context_hl_ratio:
+            self.empty_cache()
+            self.context_hl_ratio = context_hl_ratio
+            self.decay_rate = 0.5 # hardcoded!
 
     def set_context_combine(self, context_combine):
-        self.context_combine = context_combine
+        if not hasattr(self, 'context_combine') or context_combine != self.context_combine:
+            self.empty_cache()
+            self.context_combine = context_combine
 
     def set_tl_combine(self, tl_combine):
-        self.tl_combine = tl_combine
+        if not hasattr(self, 'tl_combine') or tl_combine != self.tl_combine:
+            self.empty_cache()
+            self.tl_combine = tl_combine
 
     def print_settings(self):
         print('Context size:', self.context_size)
@@ -84,6 +101,8 @@ class Contextifier:
         print('Context combine:', self.context_combine)
         print('Tweet-level combine:', self.tl_combine)
         print('Post types:', self.post_types)
+        print('Size of cache:', len(self.cache))
+
 
     def assemble_context(self, all_data):
         '''
@@ -280,10 +299,14 @@ class Contextifier:
             (np.array(int)): the context embedding 
         '''
         if tweet_id in self.tweet_to_ct: # Allows for reading in from files
-            return self.tweet_to_ct['tweet_id']
-        return self._create_context_embedding(self.id_to_location[tweet_id][0],
+            return self.tweet_to_ct[tweet_id]
+        if tweet_id in self.cache:
+            return self.cache[tweet_id]
+        context_embedding = self._create_context_embedding(self.id_to_location[tweet_id][0],
                                             self.id_to_location[tweet_id][1],
                                             keep_stats)
+        self.cache[tweet_id] = context_embedding
+        return context_embedding
     
     def from_file(self, in_file):
         '''
