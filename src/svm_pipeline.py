@@ -157,7 +157,7 @@ def transform_data(data, models):
     to_stack = []
     # standardize order (alphabetical): splex_cl, splex_tl, unigrams, w2v_cl, w2v_tl,
     for rep_type, rep in sorted(reps.items(), key=lambda x: x[0]):
-        if rep_type == 'count':
+        if rep_type == 'unigrams':
             to_stack.append(rep)
         else:
             to_stack.append(csr_matrix(np.array(rep)))
@@ -182,8 +182,10 @@ def cross_validate(dl, models):
         X, y = transform_data(tr, models)
         print('Training dimensions:', X.shape, y.shape)
 
-        weights = {0: 0.35, 1: 0.5, 2: 0.15}
-        args['weights'] = weights
+        if args['weights'] == 'static':
+            weights = {0: 0.35, 1: 0.5, 2: 0.15}
+        else: # weights == dynamic
+            weights = 'balanced'
         clf = SVC(kernel='linear', class_weight=weights)
         clf.fit(X, y)
 
@@ -202,8 +204,7 @@ def cross_validate(dl, models):
     print('AVERAGE F1:', round(total_f1/5, 5))
     return scores
 
-def run_experiment(models = None):
-    # check representation specifications
+def get_specs():
     specs = []
     if args['include_unigrams']:
         specs.append('UNI')
@@ -225,19 +226,41 @@ def run_experiment(models = None):
         specs.append('WC')
         specs.append(str(args['w2v_size']))
         specs.append(str(args['w2v_hl']))
+        if args['w2v_use_rt']:
+            specs.append('rt')
+        if args['w2v_use_mentions']:
+            specs.append('mn')
+        if args['w2v_use_rt_mentions']:
+            specs.append('rtm')
 
     if args['include_splex_cl']:
         specs.append('SC')
         specs.append(args['splex_cl_mode'])
         specs.append(str(args['splex_size']))
         specs.append(str(args['splex_hl']))
+        if args['splex_use_rt']:
+            specs.append('rt')
+        if args['splex_use_mentions']:
+            specs.append('mn')
+        if args['splex_use_rt_mentions']:
+            specs.append('rtm')
 
     assert(len(specs) > 0)
+
+    if args['weights'] == 'static':
+        specs.append('STAT')
+    else:
+        specs.append('DYN')
 
     if args['tuning']:
         specs.append('TUN')
     else:
         specs.append('TST')
+
+    return specs
+
+def run_experiment(models = None):
+    specs = get_specs()
 
     # initialize representation models
     if models is None:
@@ -268,19 +291,26 @@ def run_experiment(models = None):
 # print macro F1 in each fold
 # print final average of macro F1's
 def print_scores(per_class, verbose=True):
-    avg_mac_f = 0.0
+    avg_loss_f = avg_agg_f = avg_oth_f = avg_mac_f = 0.0
     for fold_i, fold in enumerate(per_class):
         print('Fold:', fold_i)
         if verbose:
             for metric, metric_results in zip(['Precision', 'Recall', 'F1'], fold):
                 l, a, o = metric_results
+                if metric == 'F1':
+                    avg_loss_f += l
+                    avg_agg_f += a
+                    avg_oth_f += o
                 print(metric, '- Loss: {}. Agg: {}. Other: {}.'.format(round(l, 5), round(a, 5), round(o, 5)))
         print('Macro F1:', round(np.mean(fold[2]), 5))
         avg_mac_f += np.mean(fold[2])
         print()
+    print('AVG LOSS F1:', round(avg_loss_f/len(per_class), 5))
+    print('AVG AGG F1:', round(avg_agg_f/len(per_class), 5))
+    print('AVG OTH F1:', round(avg_oth_f/len(per_class), 5))
     print('AVG MACRO F1:', round(avg_mac_f/len(per_class), 5))
 
-# unigrams, word2vec, all versions of SPLex scaling
+# test combos for tweet level
 def test_tl_combos():
     args['include_unigrams'] = True
     args['include_w2v_tl'] = False
@@ -314,58 +344,75 @@ def test_tl_combos():
     args['splex_scale'] = 'balanced_standard'
     run_experiment()  # w2v + splex balanced standard
 
+# test combos for context level
 def test_cl_combos():
     # initialize all models that will be needed
+    print('Testing context-level combos.')
     args['include_unigrams'] = False
     args['include_w2v_tl'] = True
     args['include_splex_tl'] = True
     args['include_w2v_cl'] = True
-    args['include_splex_cl'] = True
+    args['include_splex_cl'] = False
     models = init_models()
 
-    # try with just w2v, past two months
-    args['include_splex_cl'] = False
-    args['w2v_size'] = 60
-    run_experiment(models=models)
+    # try different postings for just w2v
+    # args['w2v_use_rt'] = True
+    # args['w2v_use_mentions'] = False
+    # args['w2v_use_rt_mentions'] = False
+    # run_experiment(models=models)
 
-    # try with just w2v, history of a year
-    args['w2v_size'] = 360
-    run_experiment(models=models)
+    # args['w2v_use_rt'] = False
+    # args['w2v_use_mentions'] = True
+    # run_experiment(models=models)
 
-    # try with just splex, sum
-    args['include_w2v_cl'] = False
-    args['include_splex_cl'] = True
-    args['splex_cl_mode'] = 'sum'
+    args['w2v_use_rt'] = True
+    args['w2v_use_mentions'] = True
+    args['w2v_use_rt_mentions'] = True
     run_experiment(models=models)
+    #
+    # args['w2v_use_rt_mentions'] = False
+    # args['w2v_use_rt'] = True
+    # args['w2v_use_mentions'] = True
+    # run_experiment(models=models)
+    #
+    # args['splex_use_mentions'] = False
+    # args['splex_use_rt_mentions'] = True
+    # run_experiment(models=models)
 
-    # try with just splex, avg
-    args['splex_cl_mode'] = 'avg'
-    run_experiment(models=models)
+    # # try with just w2v, past week
+    # args['w2v_size'] = 7
+    # run_experiment(models=models)
+    #
+    # # try with just w2v, past year
+    # args['w2v_size'] = 360
+    # run_experiment(models=models)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description = '')
-    parser.add_argument('-iu', '--include_unigrams', type = bool, default = False, help = 'whether to include unigrams')
+    parser.add_argument('-w', '--weights', type = str, default = 'dynamic', help = 'weights for SVM: \'dynamic\' or \'static\'')
+
+    parser.add_argument('-iu', '--include_unigrams', type = bool, default = True, help = 'whether to include unigrams')
     parser.add_argument('-usize', '--unigram_size', type = int, default = 10000, help = 'number of unigrams to include')
 
-    parser.add_argument('-iwt', '--include_w2v_tl', type = bool, default = True, help = 'whether to include w2v embeddings at tweet-level; if false, w2v-tweet params are ignored')
+    parser.add_argument('-iwt', '--include_w2v_tl', type = bool, default = False, help = 'whether to include w2v embeddings at tweet-level; if false, w2v-tweet params are ignored')
     parser.add_argument('-d2v', '--use_d2v', type = bool, default = False, help = 'use doc2vec instead of aggregated w2v embedding for tweet-level')
     parser.add_argument('-wtmode', '--w2v_tl_mode', type = str, default = 'avg', help = 'how to combine w2v embeddings at tweet-level')
 
-    parser.add_argument('-ist', '--include_splex_tl', type = bool, default = True, help = 'whether to include splex at tweet-level')
+    parser.add_argument('-ist', '--include_splex_tl', type = bool, default = False, help = 'whether to include splex at tweet-level')
     parser.add_argument('-stscale', '--splex_scale', type = str, default = 'minmax', help = 'which scaling of splex to use')
     parser.add_argument('-isub', '--include_sub_splex_tl', type = bool, default = False, help = 'whether to include splex substance use scores at tweet-level')
     parser.add_argument('-stmode', '--splex_tl_mode', type = str, default = 'sum', help = 'how to combine splex scores into tweet-level')
 
-    parser.add_argument('-iwc', '--include_w2v_cl', type = bool, default = True, help = 'whether to include w2v embeddings in context; if false, w2v-context params are ignored')
+    parser.add_argument('-iwc', '--include_w2v_cl', type = bool, default = False, help = 'whether to include w2v embeddings in context; if false, w2v-context params are ignored')
     parser.add_argument('-wcmode', '--w2v_cl_mode', type = str, default = 'avg', help = 'how to combine tweet-level w2v embeddings into context-level')
-    parser.add_argument('-wcsize', '--w2v_size', type = int, default = 360, help = 'w2v-context: number of days to look back')
+    parser.add_argument('-wcsize', '--w2v_size', type = int, default = 60, help = 'w2v-context: number of days to look back')
     parser.add_argument('-wchl', '--w2v_hl', type = float, default = .5, help = 'w2v-context: half-life ratio')
-    parser.add_argument('-wcrt', '--w2v_use_rt', type = bool, default = False, help = 'w2v-context: User A retweets User B\'s tweet -- if true,this tweet will be counted in User A and User B\'s context')
+    parser.add_argument('-wcrt', '--w2v_use_rt', type = bool, default = True, help = 'w2v-context: User A retweets User B\'s tweet -- if true,this tweet will be counted in User A and User B\'s context')
     parser.add_argument('-wcmen', '--w2v_use_mentions', type = bool, default = False, help = 'w2v-context: User A tweets, mentioning User B -- if true, this tweet will be in User A and User B\'s context')
     parser.add_argument('-wcrtmen', '--w2v_use_rt_mentions', type = bool, default = False, help = 'w2v-context: User A retweets User B\'s tweet, which mentioned User C -- if true,this tweet will counted in User A and User C\'s history')
 
-    parser.add_argument('-isc', '--include_splex_cl', type = bool, default = True, help = 'whether to include splex in context; if false, splex-context params are ignored')
+    parser.add_argument('-isc', '--include_splex_cl', type = bool, default = False, help = 'whether to include splex in context; if false, splex-context params are ignored')
     parser.add_argument('-scmode', '--splex_cl_mode', type = str, default = 'sum', help = 'how to combine tweet-level splex scores into context-level')
     parser.add_argument('-scsize', '--splex_size', type = int, default = 2, help = 'splex-context: number of days to look back')
     parser.add_argument('-schl', '--splex_hl', type = float, default = 1, help = 'splex-context: half-life ratio')
@@ -378,6 +425,9 @@ if __name__ == '__main__':
     args = vars(parser.parse_args())
     print(args)
 
-    # run_experiment()
+    run_experiment()
     # test_tl_combos()
-    test_cl_combos()
+    # test_cl_combos()
+
+    # per_class = pickle.load(open('../cv_results/uni_10000_tst.pkl', 'rb'))[1]
+    # print_scores(per_class)

@@ -25,7 +25,6 @@ nb_classes = 3
 # all the labeled ids
 labeled_tids = np.loadtxt('../data/labeled_tids.np', dtype='int')
 
-
 # extracting the dimension for each input name
 # also assert that all the input from the same input name has the same dimension
 # and that for each key input_name2id2np contains mapping from every labeled tweet
@@ -218,13 +217,18 @@ class Experiment:
             fold_data = self.dl.cv_data(fold_idx)
             ((X_train, y_train), (X_val, y_val), (X_test, y_test)) = \
                 create_clf_data(self.input_name2id2np, fold_data, return_generators=False)
+
+            # check splex
+            splex_mat = X_train['splex_input']
+            print(splex_mat[:5])
+
             if self.adapt_train_vocab:
                 adapt_vocab(X_train, (X_val, X_test))
 
             class_weight = calculate_class_weight(y_train)
 
             # initializing model, train and predict
-            K.clear_session()
+            # K.clear_session()
             self.kwargs['input_dim_map'] = extract_dim_input_name2id2np(self.input_name2id2np)
             self.model = NN_architecture(**self.kwargs).model
             self.model.compile(optimizer='adam', loss='categorical_crossentropy',
@@ -255,7 +259,7 @@ class Experiment:
             # make y categorical
             y_pred = np.argmax(y_pred, axis=-1)
             y_test = np.argmax(y_test, axis=-1)
-            results.append(precision_recall_fscore_support(y_pred, y_test))
+            results.append(precision_recall_fscore_support(y_test, y_pred))
 
         # saving results
         results = np.array(results)
