@@ -33,7 +33,7 @@ class Contextifier:
             tweet_level (TweetLevel): instance of TweetLevel class. See
                 represent_tweet_level.py.
             post_types (list (str)): post types, must be within self.POST_TYPES
-            context_size (float): Number of days to look back
+            context_size (float): Number of days to look back or 'ALL'
             context_hl_ratio (float): Ratio of half life to context size. 
                     Tweet embeddings will be weighed according to
                     self.decay_rate)^(t/x) where t is the number of days the 
@@ -46,6 +46,7 @@ class Contextifier:
 
         '''
         # Save variables
+        print('Initializing Contextifier...')
         self.tweet_level = tweet_level
         self.set_post_types(post_types)
         self.set_context_size(context_size)
@@ -77,7 +78,12 @@ class Contextifier:
     def set_tl_combine(self, tl_combine):
         self.tl_combine = tl_combine
 
-        
+    def print_settings(self):
+        print('Context size:', self.context_size)
+        print('Half-life ratio:', self.context_hl_ratio)
+        print('Context combine:', self.context_combine)
+        print('Tweet-level combine:', self.tl_combine)
+        print('Post types:', self.post_types)
 
     def assemble_context(self, all_data):
         '''
