@@ -219,10 +219,6 @@ class Experiment:
             ((X_train, y_train), (X_val, y_val), (X_test, y_test)) = \
                 create_clf_data(self.input_name2id2np, fold_data, return_generators=False)
 
-            # check splex
-            splex_mat = X_train['splex_input']
-            print(splex_mat[:5])
-
             if self.adapt_train_vocab:
                 adapt_vocab(X_train, (X_val, X_test))
 
