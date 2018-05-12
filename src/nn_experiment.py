@@ -263,7 +263,7 @@ class Experiment:
 
             elif self.kwargs.get('mode') is None or self.kwargs.get('mode') == 'cascade':
                 num_val, num_test = y_val.shape[0], y_test.shape[0]
-                y_pred_val, y_pred = [None] * num_val, [None] * num_test
+                y_pred_val, y_pred_test = [None] * num_val, [None] * num_test
 
                 for class_idx in range(2):
                     self.model = NN_architecture(**self.kwargs).model
@@ -292,27 +292,28 @@ class Experiment:
                     for t in np.arange(0.01, 1, 0.01):
                         y_val_pred_ = [0] * num_val
                         for idx in range(num_val):
-                            if y_pred[idx] is None and _y_pred_val_score[idx] >= t:
+                            if y_pred_test[idx] is None and _y_pred_val_score[idx] >= t:
                                 y_val_pred_[idx] = 1
                         f = f1_score(_y_val_, y_val_pred_)
                         if f > best_f_val:
                             best_f_val = f
                             best_t = t
+                        y_val_pred_ = None
 
                     for idx in range(num_val):
                         if y_pred_val[idx] is None and _y_pred_val_score[idx] >= best_t:
                             y_pred_val[idx] = class_idx
 
                     for idx in range(num_test):
-                        if y_pred[idx] is None and _y_pred_test_score[idx] >= best_t:
-                            y_pred[idx] = class_idx
+                        if y_pred_test[idx] is None and _y_pred_test_score[idx] >= best_t:
+                            y_pred_test[idx] = class_idx
 
                 for idx in range(num_test):
-                    if y_pred[idx] is None:
-                        y_pred[idx] = 2
+                    if y_pred_test[idx] is None:
+                        y_pred_test[idx] = 2
     
-            print(precision_recall_fscore_support(y_test, y_pred))
-            results.append(precision_recall_fscore_support(y_test, y_pred))
+            print(precision_recall_fscore_support(y_test, y_pred_test))
+            results.append(precision_recall_fscore_support(y_test, y_pred_test))
 
         # saving results
         results = np.array(results)

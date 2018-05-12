@@ -87,6 +87,7 @@ def print_dirs(dirs):
     for d in dirs:
         print('directory name %s, results across 5 fold as follows: ' % d)
         print(get_fold_macro_f(d))
+        print(np.mean(get_fold_macro_f(d)))
 
 # you can directly run this file through terminal by
 # "python3 read_results.py <list of directories that you want to print the results>"
