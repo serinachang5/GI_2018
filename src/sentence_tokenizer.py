@@ -11,7 +11,7 @@ char2property = pkl.load(open('../model/char.pkl', 'rb'))
 
 # creating an id to token map to debug
 id2word = dict([(word2property[word]['id'], word) for word in word2property])
-id2char = dict([(char2property[c]['id'], c) for c in char2property])#chr(c) if bytes(c) < bytes(256) else c) for c in char2property])
+id2char = dict([(char2property[c]['id'], str(chr(c)) if bytes(c) < bytes(256) else c.decode()) for c in char2property])
 
 # Given an array of integer, return a unicode representation
 def unicode_rep(arr, option='word'):
@@ -59,6 +59,7 @@ def int_array_rep(s, option='word', vocab_count=50000, debug=False):
             print('mapping back to unicode string: %s' % ' '.join([id2word[id] for id in result]))
         return result
     elif option == 'char':
+        print(utf8encode)
         char_array = to_char_array(utf8encode)
         for c in char_array:
             if c in char2property and char2property[c]['id'] < vocab_count:
@@ -66,7 +67,7 @@ def int_array_rep(s, option='word', vocab_count=50000, debug=False):
             else:
                 result.append(1)
         if debug:
-            print('mapping back to unicode string: %s' % ''.join([id2char[id] for id in result]))
+            print('mapping back to unicode string: %s' % (''.join([id2char[id] for id in result])))
         return result
     else:
         raise ValueError('Option %s not implemented' % option)

@@ -18,6 +18,7 @@ iii) return a utf-8 encoding rather than a string
 import re
 from emoji import UNICODE_EMOJI
 import unicodedata
+from nltk.tokenize import TweetTokenizer
 
 # a hand-curated set of emojis (modifiers)
 # that would be excluded
@@ -27,6 +28,8 @@ excluded = set([b'\xf0\x9f\x8f\xbc',
                 b'\xef\xb8\x8f',
                 b'\xe2\x99\x82',
                 b'\xe2\x80\x8d'])
+
+regex_punc = re.compile('[\\!\\"\\$\\%\\&\\\'\\(\\)\\*\\+\\,\\-\\.\\/\\:\\;\\<\\=\\>\\?\\@\\[\\\\\\]\\^\\`\\{\\|\\}\\~]')
 
 def extract_mentioned_user_name(s):
     s = str(s)
@@ -51,6 +54,7 @@ def extract_user_rt(s):
     if len(tokens) > 2 and len(tokens[1]) >= 2:
         return tokens[1][1:-1].lower()
     return None
+
 
 def to_char_array(s):
     """
@@ -79,7 +83,9 @@ def to_char_array(s):
             continue
         for c in token:
             char_array.append(c)
+    print(char_array)
     return char_array[1:]
+
 
 # check whether an emoji is an emoji modifier
 # (e.g. skin colors, etc)
@@ -128,6 +134,7 @@ tokens_re = re.compile(r'(' + '|'.join(regex_str) + ')', re.VERBOSE | re.IGNOREC
 # returns a list of tokens after applying the regex
 def tokenize(s):
     return tokens_re.findall(s)
+
 
 # preprocess a raw string and returns its utf-8 representation
 def preprocess(s, char_level=False, debug=False):
@@ -181,11 +188,41 @@ def preprocess(s, char_level=False, debug=False):
         print([isemoji(c) for c in utf8encoded.split(b' ')])
     return utf8encoded
 
+'''
+def preprocess(tweet, char_level=False, debug=False):
+    # replace all other white space with a single space
+    tweet = re.sub('\s+', ' ', tweet)
+    # remove emoji placeholders
+    tweet = re.sub('(::emoji::)', '', tweet)
+    # replace &amp; with and
+    tweet = re.sub('&amp;', 'and', tweet)
+    if not char_level:
+        tknzr = TweetTokenizer()
+        tokens = tknzr.tokenize(tweet)
+        tweet = ' '.join(tokens)
+
+    # replace user handles with a constant
+    tweet = re.sub('@[0-9a-zA-Z_]+', '__USER_HANDLE__', tweet)
+    # replace urls
+    tweet = re.sub('https?://[a-zA-Z0-9_\./]*', '__URL__', tweet)
+    # replace retweet markers
+    tweet = re.sub('^RT', '__RT__', tweet)
+    # remove words containing digits
+    tweet = re.sub(r'#*\w*\d+(?:[\./:,\-]\d+)?\w*', '', tweet).strip()
+    tweet = regex_punc.sub('', tweet)
+    # remove extra white space due to above operations
+    tweet = re.sub(' +', ' ', tweet)
+    if debug:
+        print(tweet)
+    return tweet
+'''
 # a test case
 if __name__ == '__main__':
-    # s = 'FREE 🔓🔓 BRO @ReesemoneySODMG Shit is FU 😤😤👿 .....👮🏽👮🏽💥💥💥🔫'
-    s = 'RT @Ebkfoee: 🔥🔥🔥🔥🔥 @Ebkfoe_ https://t.co/xWzNGMduby #ICLR'
+    s = 'FREE 🔓🔓 BRO @ReesemoneySODMG Shit is FU 😤😤👿 .....👮🏽👮🏽💥💥💥🔫 #EMNLP'
+    # s = 'RT @Ebkfoee: 🔥🔥🔥🔥🔥 @Ebkfoee https://t.co/xWzNGMduby #ICLR'
     binary_str = preprocess(s, debug=True, char_level=True)
+    print(binary_str)
+    print([s.decode() for s in binary_str.split(b' ')])
     print(to_char_array(binary_str))
     print(extract_mentioned_user_name(s))
     print(extract_user_rt(s))

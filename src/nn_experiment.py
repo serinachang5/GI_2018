@@ -15,8 +15,9 @@ from data_loader import Data_loader
 from generator_util import create_clf_data
 import numpy as np
 import subprocess
-from sklearn.metrics import precision_recall_fscore_support
+from sklearn.metrics import precision_recall_fscore_support, f1_score
 from keras import backend as K
+from keras import optimizers
 
 # number of classes we are performing classification task
 # currently 3
@@ -132,7 +133,7 @@ def adapt_vocab(X_train, X_list):
 class Experiment:
 
     def __init__(self, experiment_dir, input_name2id2np=None, adapt_train_vocab=False,
-                 comments='', epochs=50, patience=15, **kwargs):
+                 comments='', epochs=10, patience=3, **kwargs):
         """
         an experiment class that runs cross validation
         designed to enable easy experiments with combinations of:
@@ -197,13 +198,13 @@ class Experiment:
             for key in kwargs:
                 readme.write("%s: %s\n" % (str(key), str(kwargs[key])))
 
-        # initializing fields of the class
         if input_name2id2np is None:
             input_name2id2np = {}
         self.input_name2id2np = input_name2id2np
         self.fold = 5
         self.dl = Data_loader(option='both', labeled_only=True, **kwargs)
         self.epochs, self.patience = epochs, patience
+
 
     # cross validation
     # write all results to the directory
@@ -212,7 +213,7 @@ class Experiment:
         results = []
 
         for fold_idx in range(self.fold):
-            print('cross validation fold %d.' % fold_idx)
+            print('cross validation fold %d.' % (fold_idx + 1))
 
             # retriving cross validataion data
             fold_data = self.dl.cv_data(fold_idx)
@@ -226,36 +227,93 @@ class Experiment:
             # initializing model, train and predict
             K.clear_session()
             self.kwargs['input_dim_map'] = extract_dim_input_name2id2np(self.input_name2id2np)
-            self.model = NN_architecture(**self.kwargs).model
-            self.model.compile(optimizer='adam', loss='categorical_crossentropy',
-                               metrics=[macro_f1])
 
-            # call backs
-            es = EarlyStopping(patience=self.patience, monitor='val_macro_f1', verbose=1, mode='max')
-            weight_dir = self.experiment_dir + str(fold_idx) + '.weight'
-            mc = ModelCheckpoint(weight_dir,
-                                 save_best_only=True, save_weights_only=True)
-            callbacks = [es, mc]
-
-            # training
-            self.model.fit(x=X_train, y=y_train, validation_data=(X_val, y_val), callbacks=callbacks,
-                           epochs=self.epochs, class_weight=class_weight)
-            self.model.load_weights(weight_dir)
-
-            # prediction
-            y_pred = self.model.predict(x=X_test)
-            y_pred_val = self.model.predict(x=X_val)
-
-            # saving predictions for ensembles
-            np.savetxt(self.experiment_dir + 'pred_test' + str(fold_idx) + '.np', y_pred)
-            np.savetxt(self.experiment_dir + 'pred_val' + str(fold_idx) + '.np', y_pred_val)
-            np.savetxt(self.experiment_dir + 'truth_test' + str(fold_idx) + '.np', y_test)
-            np.savetxt(self.experiment_dir + 'truth_val' + str(fold_idx) + '.np', y_test)
-
-            # make y categorical
-            y_pred = np.argmax(y_pred, axis=-1)
             y_test = np.argmax(y_test, axis=-1)
+            
+            if self.kwargs.get('mode') == 'ternary':
+                self.model = NN_architecture(**self.kwargs).model
+                self.model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=[macro_f1])
+
+                # call backs
+                es = EarlyStopping(patience=self.patience, monitor='val_loss', verbose=1)
+                weight_dir = self.experiment_dir + str(fold_idx) + '.weight'
+                mc = ModelCheckpoint(weight_dir, save_best_only=True, save_weights_only=True)
+                callbacks = [es, mc]
+
+                # fit for at least 1 epoch
+                self.model.fit(x=X_train, y=y_train, validation_data=(X_val, y_val), class_weight=class_weight)
+
+                # training
+                self.model.fit(x=X_train, y=y_train, validation_data=(X_val, y_val), callbacks=callbacks,
+                               epochs=self.epochs, class_weight=class_weight)
+                self.model.load_weights(weight_dir)
+
+                # prediction
+                y_pred = self.model.predict(x=X_test)
+                y_pred_val = self.model.predict(x=X_val)
+
+                # saving predictions for ensembles
+                np.savetxt(self.experiment_dir + 'pred_test' + str(fold_idx) + '.np', y_pred)
+                np.savetxt(self.experiment_dir + 'pred_val' + str(fold_idx) + '.np', y_pred_val)
+                np.savetxt(self.experiment_dir + 'truth_test' + str(fold_idx) + '.np', y_test)
+                np.savetxt(self.experiment_dir + 'truth_val' + str(fold_idx) + '.np', y_test)
+
+                # make y categorical
+                y_pred = np.argmax(y_pred, axis=-1)
+
+            elif self.kwargs.get('mode') is None or self.kwargs.get('mode') == 'cascade':
+                num_val, num_test = y_val.shape[0], y_test.shape[0]
+                y_pred_val, y_pred = [None] * num_val, [None] * num_test
+
+                for class_idx in range(2):
+                    self.model = NN_architecture(**self.kwargs).model
+                    self.model.compile(optimizer='adam', loss='binary_crossentropy')
+                    _y_train_, _y_val_ = y_train[:,class_idx], y_val[:,class_idx]
+
+                    # call backs
+                    es = EarlyStopping(patience=self.patience, monitor='val_loss', verbose=1)
+                    weight_dir = self.experiment_dir + str(fold_idx) + '_' + str(class_idx) + '.weight'
+                    mc = ModelCheckpoint(weight_dir, save_best_only=True, save_weights_only=True)
+                    callbacks = [es, mc]
+
+                    # training
+                    self.model.fit(x=X_train, y=_y_train_,
+                                   validation_data=(X_val, _y_val_))
+                    self.model.fit(x=X_train, y=_y_train_,
+                                   validation_data=(X_val, _y_val_), callbacks=callbacks, epochs=self.epochs)
+
+                    self.model.load_weights(weight_dir)
+
+                    _y_pred_val_score, _y_pred_test_score = (self.model.predict(X_val).flatten(),
+                                                             self.model.predict(X_test).flatten())
+
+                    # threshold tuning
+                    best_t, best_f_val = 0, -1
+                    for t in np.arange(0.01, 1, 0.01):
+                        y_val_pred_ = [0] * num_val
+                        for idx in range(num_val):
+                            if y_pred[idx] is None and _y_pred_val_score[idx] >= t:
+                                y_val_pred_[idx] = 1
+                        f = f1_score(_y_val_, y_val_pred_)
+                        if f > best_f_val:
+                            best_f_val = f
+                            best_t = t
+
+                    for idx in range(num_val):
+                        if y_pred_val[idx] is None and _y_pred_val_score[idx] >= best_t:
+                            y_pred_val[idx] = class_idx
+
+                    for idx in range(num_test):
+                        if y_pred[idx] is None and _y_pred_test_score[idx] >= best_t:
+                            y_pred[idx] = class_idx
+
+                for idx in range(num_test):
+                    if y_pred[idx] is None:
+                        y_pred[idx] = 2
+    
+            print(precision_recall_fscore_support(y_pred, y_test))
             results.append(precision_recall_fscore_support(y_pred, y_test))
+
 
         # saving results
         results = np.array(results)

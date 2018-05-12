@@ -56,7 +56,8 @@ class NN_architecture:
                  char_vocab_size=1200, char_max_len=150,
                  drop_out=0.5,
                  filter=200, dense_size=256, embed_dim=300, kernel_range=range(1,6),
-                 pretrained_weight_dir=None, weight_in_keras=None):
+                 pretrained_weight_dir=None, weight_in_keras=None,
+                 mode='cascade'):
         """
         Initilizing a neural network architecture according to the specification
         access the actual model by self.model
@@ -95,6 +96,8 @@ class NN_architecture:
 
         # hyper parameters that is mostly fixed
         self.filter, self.dense_size, self.embed_dim, self.kernel_range = filter, dense_size, embed_dim, kernel_range
+
+        self.mode = mode
 
         # pretrained_weight directory
         self.pretrained_weight_dirs, self.weight_in_keras = pretrained_weight_dir, weight_in_keras
@@ -138,8 +141,15 @@ class NN_architecture:
             concatenated_rep = last_tensors[0]
 
         # out layer
-        self.out_layer = Dense(3, activation='softmax',
-                               name='classification')
+        if self.mode == 'ternary':
+            self.out_layer = Dense(3, activation='softmax',
+                                   name='classification')
+        elif self.mode == 'cascade':
+            self.out_layer = Dense(1, activation='sigmoid',
+                                  name='classification')
+        else:
+            print('Error: mode %s not implemented' % self.mode)
+            exit(0)
         out = self.out_layer(concatenated_rep)
         self.model = Model(inputs=inputs, outputs=out)
         self.model.summary()
