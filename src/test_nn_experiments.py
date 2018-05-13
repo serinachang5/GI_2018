@@ -30,3 +30,4 @@ if __name__ == '__main__':
     experiment = Experiment(experiment_dir='test_combine',
                             input_name2id2np=input_name2id2np, adapt_train_vocab=True,
                             options=options)
+    experiment.cv()
