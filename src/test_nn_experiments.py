@@ -15,16 +15,18 @@ if __name__ == '__main__':
     experiment.cv()
 
     # with word2vec embeddings
+    options = ['word']
     pretrained_weight_dirs = ({'aggression_word_embed': ['../weights/w2v_word_s300_w5_mc5_ep20.np'],
                               'loss_word_embed': ['../weights/w2v_word_s300_w5_mc5_ep20.np']})
     experiment = Experiment(experiment_dir='test_word2vec_' + str(_), input_name2id2np=None,
                             pretrained_weight_dirs=pretrained_weight_dirs, options=options)
     experiment.cv()
 
+    options = ['word', 'char']
     # combining word, char and other inputs
     labeled_tids = np.loadtxt('../data/labeled_tids.np', dtype='int')
-    input_name2id2np = {'dummpy': dict([(tid, np.random.normal(shape=(300,)))
+    input_name2id2np = {'dummpy': dict([(tid, np.random.normal(size=(300,)))
                                         for tid in labeled_tids])}
-    experiment = Experiment(experiment_dir='test_combine_',
+    experiment = Experiment(experiment_dir='test_combine',
                             input_name2id2np=input_name2id2np, adapt_train_vocab=True,
                             options=options)
