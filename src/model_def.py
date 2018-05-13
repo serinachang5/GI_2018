@@ -7,8 +7,7 @@ Date: 05/04/2018
 This module includes a model class s.t. each component is exactly the same as the previous ACL paper
 nevertheless, it allows combination of different models (concatenated at the last layer)
 """
-
-
+import numpy as np
 from keras.layers import Input, Dense, Conv1D, Embedding, concatenate, \
     GlobalMaxPooling1D, Dropout
 from keras.models import Model
@@ -17,31 +16,32 @@ from keras.models import Model
 # one for input_content, the other for tensor before final classification
 def content2rep(option='word', vocab_size=40000, max_len=50, drop_out=0.5,
                 filter=200, dense_size=256, embed_dim=300,
-                kernel_range=(1,6)):
+                kernel_range=(1,6), prefix='general'):
 
     # input layer
+    # input will not have a prefix in its name
     input_content = Input(shape=(max_len,),
                           name= option + '_content_input')
 
     # embedding layer
     embed_layer = Embedding(vocab_size, embed_dim, input_length=max_len,
-                            name= option + '_embed')
+                            name= prefix + '_' + option + '_embed')
     e_i = embed_layer(input_content)
-    embed_drop_out = Dropout(drop_out, name=option + '_embed_dropout')
+    embed_drop_out = Dropout(drop_out, name=prefix + '_' + option + '_embed_dropout')
     e_i = embed_drop_out(e_i)
 
     # convolutional layers
     conv_out = []
     for kernel_size in kernel_range:
         c = Conv1D(filter, kernel_size, activation='relu',
-                   name= option + '_conv_' + str(kernel_size))(e_i)
-        c = GlobalMaxPooling1D(name= option + '_max_pooling_' + str(kernel_size))(c)
-        c = Dropout(drop_out, name= option + '_drop_out_' + str(kernel_size))(c)
+                   name= prefix + '_' + option + '_conv_' + str(kernel_size))(e_i)
+        c = GlobalMaxPooling1D(name= prefix + '_' + option + '_max_pooling_' + str(kernel_size))(c)
+        c = Dropout(drop_out, name= prefix + '_' + option + '_drop_out_' + str(kernel_size))(c)
         conv_out.append(c)
     agg = concatenate(conv_out)
 
     dense_layer = Dense(dense_size, activation='relu',
-                        name= option + '_last')
+                        name= prefix + '_' + option + '_last')
     content_rep = dense_layer(agg)
 
     return input_content, content_rep
@@ -56,8 +56,9 @@ class NN_architecture:
                  char_vocab_size=1200, char_max_len=150,
                  drop_out=0.5,
                  filter=200, dense_size=256, embed_dim=300, kernel_range=range(1,6),
-                 pretrained_weight_dir=None, weight_in_keras=None,
-                 mode='cascade'):
+                 pretrained_weight_dirs=None, weight_in_keras=None,
+                 mode='cascade',
+                 prefix='general'):
         """
         Initilizing a neural network architecture according to the specification
         access the actual model by self.model
@@ -79,12 +80,13 @@ class NN_architecture:
         dense_size: the size of the dense layer following the max pooling layer
         embed_dim: embedding dimension for character and word level
         kernel_range: range of kernel sizes
-        pretrained_weight_dir: a dictionary containing the pretrained weight.
+        pretrained_weight_dirs: a dictionary containing the pretrained weight.
                     e.g. {'char': '../weights/char_ds.weights'} means that the pretrained weight for character level model
                     is in ../weights/char_ds.weights
         weight_in_keras: whether the weight is in Keras
         """
-        self.options = options
+        self.options, self.prefix = options, prefix
+        print(self.prefix)
         if input_dim_map is None:
             input_dim_map = {}
         self.input_dim_map = input_dim_map
@@ -100,7 +102,7 @@ class NN_architecture:
         self.mode = mode
 
         # pretrained_weight directory
-        self.pretrained_weight_dirs, self.weight_in_keras = pretrained_weight_dir, weight_in_keras
+        self.pretrained_weight_dirs, self.weight_in_keras = pretrained_weight_dirs, weight_in_keras
         if self.pretrained_weight_dirs is None:
             self.pretrained_weight_dirs = {}
         if self.weight_in_keras is None:
@@ -117,14 +119,15 @@ class NN_architecture:
                 if option == 'char':
                     input_content, content_rep = content2rep(option,
                                                              self.char_vocab_size, self.char_max_len, self.drop_out,
-                                                             self.filter, self.dense_size, self.embed_dim, self.kernel_range)
+                                                             self.filter, self.dense_size, self.embed_dim, self.kernel_range,
+                                                             self.prefix)
                 else:
                     input_content, content_rep = content2rep(option,
                                                              self.word_vocab_size, self.word_max_len, self.drop_out,
-                                                             self.filter, self.dense_size, self.embed_dim, self.kernel_range)
+                                                             self.filter, self.dense_size, self.embed_dim, self.kernel_range,
+                                                             self.prefix)
                 inputs.append(input_content)
                 last_tensors.append(content_rep)
-                """TODO: Implement load weights here"""
 
         # directly concatenate addtional inputs (such as splex scores and context representations)
         # to the last layer
@@ -143,21 +146,29 @@ class NN_architecture:
         # out layer
         if self.mode == 'ternary':
             self.out_layer = Dense(3, activation='softmax',
-                                   name='classification')
+                                   name=self.prefix + '_classification')
         elif self.mode == 'cascade':
             self.out_layer = Dense(1, activation='sigmoid',
-                                  name='classification')
+                                  name=self.prefix+ '_classification')
         else:
             print('Error: mode %s not implemented' % self.mode)
             exit(0)
         out = self.out_layer(concatenated_rep)
         self.model = Model(inputs=inputs, outputs=out)
+
+        layers = self.model.layers
+        layer_dict = dict([(layer.name, layer) for layer in layers])
         self.model.summary()
+        for layer_name in self.pretrained_weight_dirs:
+            if layer_name in layer_dict:
+                layer_dict[layer_name].set_weights([np.loadtxt(weight_dir)
+                                                    for weight_dir in self.pretrained_weight_dirs[layer_name]])
+                print('weight of layer %s successfully loaded.' % layer_name)
 
 if __name__ == '__main__':
     options = ['char', 'word']
     nn = NN_architecture(options,
                          word_vocab_size=40000, word_max_len=50,
                          char_vocab_size=1200, char_max_len=150,
-                         context_dim=300, context_dense_size=256,
-                         pretrained_weight_dir=None, weight_in_keras=None)
+                         pretrained_weight_dirs=None, weight_in_keras=None,
+                         prefix='shabi')

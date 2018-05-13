@@ -18,6 +18,8 @@ import subprocess
 from sklearn.metrics import precision_recall_fscore_support, f1_score
 from keras import backend as K
 from keras import optimizers
+import pickle as pkl
+import time
 
 # number of classes we are performing classification task
 # currently 3
@@ -111,7 +113,7 @@ def adapt_vocab(X_train, X_list):
     for key in X_train:
         if key in [option + '_content_input' for option in ['char', 'word']]:
 
-            # count the number of occurence fo each word
+            # count the number of occurence for each word
             wc = {}
             for xs in X_train[key]:
                 for x in xs:
@@ -132,7 +134,7 @@ def adapt_vocab(X_train, X_list):
 class Experiment:
 
     def __init__(self, experiment_dir, input_name2id2np=None, adapt_train_vocab=False,
-                 comments='', epochs=10, patience=3, **kwargs):
+                 comments='', epochs=100, patience=20, **kwargs):
         """
         an experiment class that runs cross validation
         designed to enable easy experiments with combinations of:
@@ -192,6 +194,7 @@ class Experiment:
         subprocess.call(['rm', '-rf', experiment_dir])
         subprocess.call(['mkdir', experiment_dir])
         self.adapt_train_vocab = adapt_train_vocab
+        
         with open(self.experiment_dir + 'README', 'w') as readme:
             readme.write(comments + '\n')
             for key in kwargs:
@@ -219,15 +222,18 @@ class Experiment:
             ((X_train, y_train), (X_val, y_val), (X_test, y_test)) = \
                 create_clf_data(self.input_name2id2np, fold_data, return_generators=False)
 
+            # if no pretrained weights, adapting vocabulary so that those who appear in
+            # X_train less than twice would not be counted
             if self.adapt_train_vocab:
-                adapt_vocab(X_train, (X_val, X_test))
+                    adapt_vocab(X_train, (X_val, X_test))
 
             class_weight = calculate_class_weight(y_train)
 
             # initializing model, train and predict
-            # K.clear_session()
+            K.clear_session()
             self.kwargs['input_dim_map'] = extract_dim_input_name2id2np(self.input_name2id2np)
 
+            # cross validation test data in categorical form
             y_test = np.argmax(y_test, axis=-1)
             
             if self.kwargs.get('mode') == 'ternary':
@@ -262,12 +268,27 @@ class Experiment:
                 y_pred = np.argmax(y_pred, axis=-1)
 
             elif self.kwargs.get('mode') is None or self.kwargs.get('mode') == 'cascade':
+
+                # initialize the predictions
                 num_val, num_test = y_val.shape[0], y_test.shape[0]
                 y_pred_val, y_pred_test = [None] * num_val, [None] * num_test
 
                 for class_idx in range(2):
+                    # time the training
+                    start = int(round(time.time() * 1000))
+
+                    # create layer name that has prefix
+                    # since for each fodl we train model for aggression and loss models separately
+                    if class_idx  == 0:
+                        self.kwargs['prefix'] = 'aggression'
+                    else:
+                        self.kwargs['prefix'] = 'loss'
+
+                    # initialize a model
                     self.model = NN_architecture(**self.kwargs).model
                     self.model.compile(optimizer='adam', loss='binary_crossentropy')
+
+                    # create the label for this binary classification task
                     _y_train_, _y_val_ = y_train[:,class_idx], y_val[:,class_idx]
 
                     # call backs
@@ -279,9 +300,24 @@ class Experiment:
                     # training
                     self.model.fit(x=X_train, y=_y_train_,
                                    validation_data=(X_val, _y_val_))
-                    self.model.fit(x=X_train, y=_y_train_,
-                                   validation_data=(X_val, _y_val_), callbacks=callbacks, epochs=self.epochs)
+                    history = self.model.fit(x=X_train, y=_y_train_,
+                                             validation_data=(X_val, _y_val_),
+                                             callbacks=callbacks, epochs=self.epochs)
 
+                    # sometimes adam will stuck at a saddle point
+                    # if adam does not work, use adadelta
+                    # which will not get stuck but have lower performance
+                    losses = history.history['loss']
+                    if np.min(losses) > 0.2:
+                        self.model = NN_architecture(**self.kwargs).model
+                        self.model.compile(optimizer='adadelta', loss='binary_crossentropy')
+                        self.model.fit(x=X_train, y=_y_train_,
+                                       validation_data=(X_val, _y_val_),
+                                       callbacks=callbacks, epochs=self.epochs)
+                        with open(self.experiment_dir + 'README', 'a') as readme:
+                            readme.write('fold %d class %d takes using ada-delta optimizer\n'
+                                         % (fold_idx, class_idx))
+                            
                     self.model.load_weights(weight_dir)
 
                     _y_pred_val_score, _y_pred_test_score = (self.model.predict(X_val).flatten(),
@@ -298,21 +334,36 @@ class Experiment:
                         if f > best_f_val:
                             best_f_val = f
                             best_t = t
+                        # a temp variable that we do not want its value
+                        # to be accidentally accessed by outside code
                         y_val_pred_ = None
 
+                    # predictions made only when predictions not made by the previous model
+                    # and larger than the best threshold
+                    # true for both val_pred and test_pred
                     for idx in range(num_val):
                         if y_pred_val[idx] is None and _y_pred_val_score[idx] >= best_t:
                             y_pred_val[idx] = class_idx
 
+
                     for idx in range(num_test):
                         if y_pred_test[idx] is None and _y_pred_test_score[idx] >= best_t:
                             y_pred_test[idx] = class_idx
+                    
+                    end = int(round(time.time()))
 
+                    # write how many time it takes for a run into the readme
+                    duration = end - start
+                    with open(self.experiment_dir + 'README', 'a') as readme:
+                        readme.write('fold %d class %d takes %d seconds\n'
+                                     % (fold_idx, class_idx, duration))
+
+                # predict the rest as the "Other" class
                 for idx in range(num_test):
                     if y_pred_test[idx] is None:
                         y_pred_test[idx] = 2
-    
-            print(precision_recall_fscore_support(y_test, y_pred_test))
+
+            # append the result on this fold to results
             results.append(precision_recall_fscore_support(y_test, y_pred_test))
 
         # saving results
@@ -327,6 +378,9 @@ class Experiment:
 
 if __name__ == '__main__':
     options = ['word']
-    experiment = Experiment(experiment_dir='test', adapt_train_vocab=True,
+    pretrained_weight_dirs = {'aggression_word_embed': ['../weights/w2v_word_s300_w5_mc5_ep20.np'], \
+                                'loss_word_embed': ['../weights/w2v_word_s300_w5_mc5_ep20.np']}
+    experiment = Experiment(experiment_dir='test',
+                            pretrained_weight_dirs=pretrained_weight_dirs,
                             options=options)
     experiment.cv()

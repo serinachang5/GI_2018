@@ -74,11 +74,11 @@ class Data_loader:
             self.separator = ' ' if option == 'word' else ''  # chars are not seperated, words are by spaces
         if option == 'word':  # creating an id2wtoken dictionary
             self.id2token = dict([(self.token2property[word]['id'], word) for word in self.token2property])
-            self.token2id = {v.decode('utf8'):k for k, v in self.id2token.items()}
+            # self.token2id = {v.decode('utf8'):k for k, v in self.id2token.items()}
         elif option == 'char':
             self.id2token = dict([(self.token2property[c]['id'], chr(c) if bytes(c) < bytes(256) else c)
                                   for c in self.token2property])
-            self.token2id = {v.decode('utf8'):k for k, v in self.id2token.items()}
+            # self.token2id = {v.decode('utf8'):k for k, v in self.id2token.items()}
 
         if verbose and option != 'both':
             print('%d vocab is considered.' % min(len(self.id2token), self.vocab_size))
@@ -201,7 +201,9 @@ class Data_loader:
 
     # convert an int array to the unicode representation
     def convert2unicode(self, int_arr):
-        return self.separator.join([self.id2token[id].decode() for id in int_arr])
+        return self.separator.join([self.id2token[id].decode() if type(self.id2token[id]) != str
+                                    else self.id2token[id]
+                                    for id in int_arr])
 
     def print_recovered_tweet(self, tweet_property):
         for key in tweet_property:
