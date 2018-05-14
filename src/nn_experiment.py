@@ -10,7 +10,7 @@ that require the minimum implementation
 """
 
 from keras.callbacks import EarlyStopping, ModelCheckpoint
-from model_def import NN_architecture
+from model_def import NN_architecture, input_name_is_user_idx
 from data_loader import Data_loader
 from generator_util import create_clf_data
 import numpy as np
@@ -34,6 +34,16 @@ labeled_tids = np.loadtxt('../data/labeled_tids.np', dtype='int')
 def extract_dim_input_name2id2np(input_name2id2np):
     dim_map = {}
     for input_name in input_name2id2np:
+        # special treatment for user idx
+        # since keras does not allow a single integer as input
+        if input_name_is_user_idx(input_name):
+            dim_map[input_name] = (1, )
+            id2np = input_name2id2np[input_name]
+            for id in id2np:
+                assert('int' in str(type(input_name2id2np[input_name][id])))
+                input_name2id2np[input_name][id] = np.array([input_name2id2np[input_name][id]])
+        
+        # other input_name
         id2np = input_name2id2np[input_name]
         dim = None
         for id in id2np:
