@@ -1,47 +1,80 @@
 from nn_experiment import Experiment
-from represent_tweet_level import TweetLevel
-from represent_context import Contextifier
-import numpy as np
+import pickle
 
 
+# randomly initialized
 def baseline():
     options = ['word']
-    experiment = Experiment(experiment_dir='test', input_name2id2np=None, adapt_train_vocab=True,
-                            options=options, patience=5)
+    experiment = Experiment(experiment_dir='baseline',
+                            pretrained_weight_dirs=None,
+                            input_name2id2np=None,
+                            options=options)
     experiment.cv()
 
-def init_splex_tl():
-    tl = TweetLevel(emb_file='../data/splex_minmax_svd_word_s300_seeds_hc.pkl')
-    return tl
+# use list of modes to specify how to integrate word2vec and splex:
+# 'wl' word-level - word embedding
+# 'tl' tweet-level - built by TweetLevel, concatenated after CNN
+# 'cl' context-level - built by Contextifier, concatenated after CNN
+def nn_with_additions(w2v_modes, splex_modes, interaction_dim=-1, testing=False):
+    if len(w2v_modes) == 0 and splex_modes == 0:
+        baseline()
+        return
 
-def init_context(tweet_dict):
-    tl = TweetLevel(emb_file='../data/w2v_word_s300_w5_mc5_ep20.bin', tweet_dict=tweet_dict)
-    tl_combine = 'avg'
-    context_combine = 'avg'
-    context_size = 60
-    context_hl_ratio = .5
-    post_types = [Contextifier.SELF, Contextifier.RT]
-    cl = Contextifier(tl, post_types, context_size, context_hl_ratio, context_combine, tl_combine)
-    return cl
+    dir_name = ''
+    if len(w2v_modes) > 0:
+        dir_name += 'W2V_' + '_'.join(w2v_modes)
+    if len(splex_modes) > 0:
+        dir_name += 'SP_' + '_'.join(splex_modes)
 
-def nn_with_additions(include_splex = True, include_context = True):
-    labeled_tids = np.loadtxt('../data/labeled_tids.np', dtype='int')
-    print('Loaded labeled_tids:', labeled_tids.shape)
+    # include as word embedding in pretrained
+    if 'wl' in w2v_modes and 'wl' in splex_modes:
+        word_embs = 'word_emb_w2v_splex.np'
+        word_embed_dim = 302
+    elif 'wl' in w2v_modes:
+        word_embs = 'word_emb_w2v.np'
+        word_embed_dim = 300
+    elif 'wl' in splex_modes:
+        word_embs = 'word_emb_splex.np'
+        word_embed_dim = 2
+    else:
+        word_embs = None
+        word_embed_dim = None
 
-    tweet_dict = None
+    pretrained = {}
+    if word_embs is not None:
+        pretrained['aggression_word_embed'] = [word_embs]
+        pretrained['loss_word_embed'] = [word_embs]
+
+    # include as concatenated feature
     input_name2id2np = {}
-    if include_splex:
-        tl = init_splex_tl()
-        tweet_dict = tl.tweet_dict
-        input_name2id2np['splex'] = dict((tid, tl.get_representation(tid, mode='sum')) for tid in labeled_tids)
-    if include_context:
-        cl = init_context(tweet_dict)
-        input_name2id2np['context'] = dict((tid, cl.get_context_embedding(tid, keep_stats=False)[0]) for tid in labeled_tids)
+    if 'tl' in splex_modes or 'cl' in w2v_modes or 'cl' in splex_modes:
+        all_inputs = pickle.load(open('input_name2id2np.pkl', 'rb'))
+        if 'tl' in splex_modes:
+            input_name2id2np['splex_tl'] = all_inputs['splex_tl']
+        if 'cl' in w2v_modes:
+            input_name2id2np['w2v_cl'] = all_inputs['w2v_cl']
+        if 'cl' in splex_modes:
+            input_name2id2np['splex_cl'] = all_inputs['splex_cl']
 
     options = ['word']
-    experiment = Experiment(experiment_dir='test', input_name2id2np=input_name2id2np, adapt_train_vocab=True,
-                            options=options, patience=5)
+
+    if testing:
+        experiment = Experiment(experiment_dir=dir_name,
+                                pretrained_weight_dirs=pretrained,
+                                input_name2id2np=input_name2id2np,
+                                epochs=1, patience=1,
+                                options=options,
+                                embed_dim=word_embed_dim,
+                                interaction_layer_dim=interaction_dim)
+    else:
+        experiment = Experiment(experiment_dir=dir_name,
+                                pretrained_weight_dirs=pretrained,
+                                input_name2id2np=input_name2id2np,
+                                options=options,
+                                embed_dim=word_embed_dim,
+                                interaction_layer_dim=interaction_dim)
     experiment.cv()
 
+
 if __name__ == '__main__':
-    nn_with_additions()
+    nn_with_additions(w2v_modes=['wl'], splex_modes=[], testing=True)
