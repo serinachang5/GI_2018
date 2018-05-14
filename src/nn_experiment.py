@@ -144,7 +144,7 @@ def adapt_vocab(X_train, X_list):
 class Experiment:
 
     def __init__(self, experiment_dir, input_name2id2np=None, adapt_train_vocab=False,
-                 comments='', epochs=100, patience=20, **kwargs):
+                 comments='', epochs=100, patience=7, **kwargs):
         """
         an experiment class that runs cross validation
         designed to enable easy experiments with combinations of:
