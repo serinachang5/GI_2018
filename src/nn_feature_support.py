@@ -14,8 +14,41 @@ from data_loader import Data_loader
 from represent_tweet_level import TweetLevel
 from represent_context import Contextifier
 from model_def import input_name_is_user_idx
+from sklearn.preprocessing import StandardScaler
+
+def init_tl(emb_type):
+    if emb_type == 'w2v':
+        tl = TweetLevel(emb_file='../data/w2v_word_s300_w5_mc5_ep20.bin')
+    else:
+        tl = TweetLevel(emb_file='../data/splex_minmax_svd_word_s300_seeds_hc.pkl')
+    return tl
+
+def init_context(emb_type, dl, tweet_dict, user_ct_tweets = None, id_to_location = None):
+    if emb_type == 'w2v':
+        tl = TweetLevel(emb_file='../data/w2v_word_s300_w5_mc5_ep20.bin', tweet_dict=tweet_dict)
+        tl_combine = 'avg'
+        context_combine = 'avg'
+        context_size = 60
+        context_hl_ratio = .5
+    else:
+        # default - will not include substance scores
+        tl = TweetLevel(emb_file='../data/splex_minmax_svd_word_s300_seeds_hc.pkl', tweet_dict=tweet_dict)
+        tl_combine = 'sum'
+        context_combine = 'sum'
+        context_size = 2
+        context_hl_ratio = 1
+    post_types = [Contextifier.SELF, Contextifier.RETWEET]
+
+    cl = Contextifier(tl, post_types, context_size, context_hl_ratio, context_combine, tl_combine)
+
+    if user_ct_tweets is None or id_to_location is None:
+        user_ct_tweets, id_to_location = cl.assemble_context(dl.all_data())
+    cl.set_context(user_ct_tweets, id_to_location)
+
+    return cl
 
 
+'''Preparing embeddings'''
 def make_word_embeds(include_w2v = True, include_splex = False):
     save_file, dim, w2v, splex = 'word_emb', 0, None, None
     if include_w2v:
@@ -53,107 +86,132 @@ def check_embeds(fname):
     for i in range(100, 110):
         print(i, embeds[i])
 
+def make_user_embeds(emb_type, num_users):
+    assert(emb_type == 'w2v' or emb_type == 'loss_rand' or emb_type == 'agg_rand')
+    save_file = 'user_emb_' + str(num_users) + '_' + emb_type + '.np'
+    user_dim = 300
+    embeds = np.random.rand(num_users, user_dim)
 
-def init_splex_tl():
-    tl = TweetLevel(emb_file='../data/splex_minmax_svd_word_s300_seeds_hc.pkl')
-    return tl
-
-def init_context(emb_type, dl, tweet_dict, user_ct_tweets = None, id_to_location = None):
     if emb_type == 'w2v':
-        tl = TweetLevel(emb_file='../data/w2v_word_s300_w5_mc5_ep20.bin', tweet_dict=tweet_dict)
-        tl_combine = 'avg'
-        context_combine = 'avg'
-        context_size = 60
-        context_hl_ratio = .5
-    else:
-        # default - will not include substance scores
-        tl = TweetLevel(emb_file='../data/splex_minmax_svd_word_s300_seeds_hc.pkl', tweet_dict=tweet_dict)
-        tl_combine = 'sum'
-        context_combine = 'sum'
-        context_size = 2
-        context_hl_ratio = 1
-    post_types = [Contextifier.SELF, Contextifier.RETWEET]
+        print('Initializing Data Loader...')
+        dl = Data_loader()
+        tl = init_tl('w2v')
+        found = 0
+        for user_idx in range(2, num_users):  # reserve 0 for padding (i.e. no user), 1 for unknown user
+            tweet_dicts = dl.tweets_by_user(user_idx)  # tweets WRITTEN by this user
+            if tweet_dicts is not None and len(tweet_dicts) > 0:
+                found += 1
+                all_tweets_sum = np.zeros(user_dim, dtype=np.float)
+                for tweet_dict in tweet_dicts:
+                    tid = tweet_dict['tweet_id']
+                    tweet_avg = tl.get_representation(tid, mode='avg')
+                    all_tweets_sum += tweet_avg
+                all_tweets_avg = all_tweets_sum / len(tweet_dicts)
+                embeds[user_idx] = all_tweets_avg
+        print('Found tweets for {} out of {} users'.format(found, num_users-2))
 
-    cl = Contextifier(tl, post_types, context_size, context_hl_ratio, context_combine, tl_combine)
+    embeds = StandardScaler().fit_transform(embeds)  # mean 0, variance 1
+    embeds[0] = np.zeros(user_dim)  # make sure padding is all 0's
 
-    if user_ct_tweets is None or id_to_location is None:
-        user_ct_tweets, id_to_location = cl.assemble_context(dl.all_data())
-    cl.set_context(user_ct_tweets, id_to_location)
+    np.savetxt(save_file, embeds)
+    print('Saved embeddings in', save_file)
 
-    return cl
 
-def make_input_name2id2np():
+'''Preparing inputs'''
+# splex_tl: splex tweet-level, summing word-level splex scores
+# w2v_cl: w2v context-level, averaging word-level and tweet-level context scores, 60 days, .5 hl ratio
+# splex_cl: splex context-level, summing word-level and tweet-level splex scores, 2 days, 1 hl ratio
+# post_user_index: index of user who is posting, 1 if unknown user
+# mention_user_index: index of the first user mentioned or 0 if no mentions
+# retweet_user_index: index of the user being retweeted or 0 if no user retweet
+# time: time features
+def make_inputs(num_users):
     print('Initializing Data Loader...')
-    dl = Data_loader()
+    dl = Data_loader(labeled_only=True)
     labeled_tids = np.loadtxt('../data/labeled_tids.np', dtype='int')
     print('Loaded labeled_tids:', labeled_tids.shape)
 
-    input_name2id2np = {}
+    all_inputs = {}
 
-    splex_tl = init_splex_tl()
+    # USER INPUTS
+    tweets = dl.all_data()
+    print('Size of data:', len(tweets))
+    tid2post = {}
+    tid2retweet = {}
+    tid2mention = {}
+    for tweet in tweets:
+        tid = tweet['tweet_id']
+        tid2post[tid] = tweet['user_post']
+        tid2mention[tid] = tweet['user_mentions'][0] if 'user_mentions' in tweet and len(tweet['user_mentions']) > 0 else None
+        tid2retweet[tid] = tweet['user_retweet'] if 'user_retweet' in tweet else None
+
+    all_inputs['post_user_index'] = tid2post
+    all_inputs['mention_user_index'] = tid2mention
+    all_inputs['retweet_user_index'] = tid2retweet
+    edit_user_inputs(all_inputs, num_users)
+
+    # SPLEX AND W2V INPUTS
+    splex_tl = init_tl('splex')
     tweet_dict = splex_tl.tweet_dict
-    input_name2id2np['splex_tl'] = dict((tid, splex_tl.get_representation(tid, mode='sum')) for tid in labeled_tids)
+    all_inputs['splex_tl'] = dict((tid, splex_tl.get_representation(tid, mode='sum')) for tid in labeled_tids)
     print('Built tweet-level splex.')
 
     w2v_cl = init_context('w2v', dl, tweet_dict)
     user_ct_tweets = w2v_cl.user_ct_tweets
     id_to_location = w2v_cl.id_to_location
-    input_name2id2np['w2v_cl'] = dict((tid, w2v_cl.get_context_embedding(tid, keep_stats=False)[0]) for tid in labeled_tids)
+    all_inputs['w2v_cl'] = dict((tid, w2v_cl.get_context_embedding(tid, keep_stats=False)[0]) for tid in labeled_tids)
     print('Built context-level word2vec.')
 
     splex_cl = init_context('splex', dl, tweet_dict, user_ct_tweets, id_to_location)
-    input_name2id2np['splex_cl'] = dict((tid, splex_cl.get_context_embedding(tid, keep_stats=False)[0]) for tid in labeled_tids)
+    all_inputs['splex_cl'] = dict((tid, splex_cl.get_context_embedding(tid, keep_stats=False)[0]) for tid in labeled_tids)
     print('Build context-level splex.')
 
-    save_file = 'input_name2id2np.pkl'
-    pickle.dump(input_name2id2np, open(save_file, 'wb'))
-    print('Saved in', save_file)
+    # TIME INPUT
+    id2time = pickle.load(open('id2time_feat.pkl', 'rb'))
+    all_inputs['time'] = id2time
 
-def add_user_info():
-    print('Initializing Data Loader...')
-    dl = Data_loader(labeled_only=True)
-    labeled_tweets = dl.all_data()
-    print('size of labeled data:', len(labeled_tweets))
-
-    tid2post = {}
-    tid2mentions = {}
-    tid2retweet = {}
-    # need to all be arrays, even if singular features
-    for tweet in labeled_tweets:
-        tid = tweet['tweet_id']
-        tid2post[tid] = np.array([tweet['user_post']], dtype=np.int)
-        if 'user_mentions' in tweet:
-            tid2mentions[tid] = np.array(tweet['user_mentions'], dtype=np.int)
-        else:
-            tid2mentions[tid] = np.array([0], dtype=np.int)
-        if 'user_retweet' in tweet:
-            tid2retweet[tid] = np.array([tweet['user_retweet']], dtype=np.int)
-        else:
-            tid2retweet[tid] = np.array([0], dtype=np.int)
-
-    save_file = 'input_name2id2np.pkl'
-    complete_input = pickle.load(open(save_file, 'rb'))
-    complete_input['user_post'] = tid2post
-    print('post:', list(tid2post.values())[:10])
-    complete_input['user_mentions'] = tid2mentions
-    print('mentions:', list(tid2mentions.values())[:10])
-    complete_input['user_retweet'] = tid2retweet
-    print('retweet:', list(tid2retweet.values())[:10])
-    pickle.dump(complete_input, open(save_file, 'wb'))
+    save_file = 'all_inputs.pkl'
+    pickle.dump(all_inputs, open(save_file, 'wb'))
     print('Saved', save_file)
 
-
-def check_input():
-    save_file = 'input_name2id2np.pkl'
-    complete_input = pickle.load(open(save_file, 'rb'))
-    for input_name in complete_input:
+# change None's to 0
+# change user id's >= user_nums to 1
+# change all user id's to nd arrays of length 1
+def edit_user_inputs(inputs, num_users):
+    for input_name in inputs:
         if input_name_is_user_idx(input_name):
             print(input_name)
-            id2np = complete_input[input_name]
-            for id in id2np:
-                assert('int' in str(type(id2np[id])))
+            for id, user_idx in inputs[input_name].items():
+                if user_idx is None:
+                    user_idx = 0   # if there is no retweet or mention, user index is 0
+                assert 'int' in str(type(user_idx))
+                if user_idx >= num_users:
+                    user_idx = 1  # if user index is not under num_users, user index is 1
+                inputs[input_name][id] = np.array([user_idx])
+
+# take unlabeled tids out of all_inputs.pkl to save space
+def edit_inputs_pkl():
+    save_file = 'all_inputs.pkl'
+    inputs = pickle.load(open(save_file, 'rb'))
+    labeled_tids = np.loadtxt('../data/labeled_tids.np', dtype='int')
+    labeled_tids = set(labeled_tids.flatten())
+    print('Size of tid set:', len(labeled_tids))
+    for input_name in inputs:
+        print(input_name)
+        print('original size of id2np:', len(inputs[input_name]))
+        only_labeled = {}
+        for id,val in inputs[input_name].items():
+            if id in labeled_tids:
+                only_labeled[id] = val
+        inputs[input_name] = only_labeled
+        print('new size of id2np:', len(inputs[input_name]))
+    pickle.dump(inputs, open(save_file, 'wb'))
+    print('Edited inputs, saved in', save_file)
 
 if __name__ == '__main__':
     # make_word_embeds(include_w2v=True, include_splex=False)
     # check_embeds('word_emb_w2v_splex.np')
-    add_user_info()
+    # add_user_info()
+    # make_user_embeds(emb_type='agg_rand', num_users=700)
+    # make_inputs(num_users=700)
+    edit_inputs_pkl()

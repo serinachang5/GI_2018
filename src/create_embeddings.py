@@ -147,6 +147,7 @@ def sample_usage(fname, mode):
 			inferred = model.infer_vector(seq)
 			print(inferred[:10])
 
+
 def main(args):
 	# params for data loader
 	option = args['option']
@@ -196,7 +197,7 @@ if __name__ == '__main__':
 
 	main(args)
 
-	# w2v_file = '../data/w2v_word_s300_w5_mc5_it20.bin'
+	# w2v_file = '../data/w2v_word_s300_w5_mc5_ep20.bin'
 	# svd_file = '../data/svd_word_s300.pkl'
 	# sample_usage(w2v_file, svd_file)
 
@@ -205,7 +206,7 @@ if __name__ == '__main__':
 	# 			  ['6', '132', '130', '11646', '47', '6', '25', '4', '132', '130', '3934', '73', '12', '163', '3035', '545', '221', '545']]
 	# test_tags = [['740043438788345856'], ['258662084089368576'], ['842801723001487360']]
 	# generate_d2v_embs(test_sents, test_tags, 'word')
-	# d2v_file = 'd2v_word_s300_w5_mc1_it20.mdl'
+	# d2v_file = 'd2v_word_s300_w5_mc1_ep20.mdl'
 	# sample_usage(d2v_file, mode='d2v')
 
 
