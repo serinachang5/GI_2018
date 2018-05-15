@@ -86,11 +86,10 @@ def check_embeds(fname):
     for i in range(100, 110):
         print(i, embeds[i])
 
-def make_user_embeds(emb_type, num_users):
+def make_user_embeds(emb_type, num_users, user_emb_dim):
     assert(emb_type == 'w2v' or emb_type == 'loss_rand' or emb_type == 'agg_rand')
-    save_file = 'user_emb_' + str(num_users) + '_' + emb_type + '.np'
-    user_dim = 300
-    embeds = np.random.rand(num_users, user_dim)
+    save_file = 'user_emb_' + str(num_users) + '_' + emb_type + '_' + str(user_emb_dim) + '.np'
+    embeds = np.random.rand(num_users, user_emb_dim)
 
     if emb_type == 'w2v':
         print('Initializing Data Loader...')
@@ -101,7 +100,7 @@ def make_user_embeds(emb_type, num_users):
             tweet_dicts = dl.tweets_by_user(user_idx)  # tweets WRITTEN by this user
             if tweet_dicts is not None and len(tweet_dicts) > 0:
                 found += 1
-                all_tweets_sum = np.zeros(user_dim, dtype=np.float)
+                all_tweets_sum = np.zeros(user_emb_dim, dtype=np.float)
                 for tweet_dict in tweet_dicts:
                     tid = tweet_dict['tweet_id']
                     tweet_avg = tl.get_representation(tid, mode='avg')
@@ -111,7 +110,7 @@ def make_user_embeds(emb_type, num_users):
         print('Found tweets for {} out of {} users'.format(found, num_users-2))
 
     embeds = StandardScaler().fit_transform(embeds)  # mean 0, variance 1
-    embeds[0] = np.zeros(user_dim)  # make sure padding is all 0's
+    embeds[0] = np.zeros(user_emb_dim)  # make sure padding is all 0's
 
     np.savetxt(save_file, embeds)
     print('Saved embeddings in', save_file)
@@ -212,6 +211,6 @@ if __name__ == '__main__':
     # make_word_embeds(include_w2v=True, include_splex=False)
     # check_embeds('word_emb_w2v_splex.np')
     # add_user_info()
-    # make_user_embeds(emb_type='agg_rand', num_users=700)
+    make_user_embeds(emb_type='loss_rand', num_users=700, user_emb_dim=32)
     # make_inputs(num_users=700)
-    edit_inputs_pkl()
+    # edit_inputs_pkl()

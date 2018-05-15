@@ -23,7 +23,11 @@ def baseline():
 # int_dim and int_dropout are for interaction layer
 # run_num indicates which run we are on
 # if testing, this just checks the set-up, running only 1 epoch and patience = 1
-def nn_with_additions(w2v_modes, splex_modes, user_modes, include_time, user_rand = True, int_dim=-1, int_dropout=.5, run_num = None, testing=False):
+def nn_with_additions(w2v_modes, splex_modes, user_modes, include_time,
+                      user_rand = True, user_emb_dim = 32,
+                      int_dim=-1, int_dropout=.5,
+                      run_num = None, testing=False):
+    assert(user_emb_dim == 300 or user_emb_dim == 32)
     if len(w2v_modes) == 0 and splex_modes == 0:
         baseline()
         return
@@ -34,7 +38,11 @@ def nn_with_additions(w2v_modes, splex_modes, user_modes, include_time, user_ran
     if len(splex_modes) > 0:
         dir_name += 'SP_' + '_'.join(splex_modes)
     if len(user_modes) > 0:
-        dir_name += 'US_' + '_'.join(user_modes)
+        if user_rand:
+            dir_name += 'USR'
+        else:
+            dir_name += 'USP'
+        dir_name += '_'.join(user_modes)
     if include_time:
         dir_name += 'TI'
     if int_dim > 0:
@@ -61,8 +69,12 @@ def nn_with_additions(w2v_modes, splex_modes, user_modes, include_time, user_ran
     if len(user_modes) > 0:
         num_users = 700
         if user_rand:
-            user_emb_agg = 'user_emb_700_agg_rand.np'
-            user_emb_loss = 'user_emb_700_loss_rand.np'
+            if user_emb_dim == 300:
+                user_emb_agg = 'user_emb_700_agg_rand_300.np'
+                user_emb_loss = 'user_emb_700_loss_rand_300.np'
+            else:
+                user_emb_agg = 'user_emb_700_agg_rand_32.np'
+                user_emb_loss = 'user_emb_700_loss_rand_32.np'
         else:
             user_emb_agg = 'user_emb_700_w2v.np'
             user_emb_loss = 'user_emb_700_w2v.np'
@@ -107,7 +119,7 @@ def nn_with_additions(w2v_modes, splex_modes, user_modes, include_time, user_ran
                                 epochs=1, patience=1,
                                 options=options,
                                 embed_dim=word_emb_dim,
-                                num_users=num_users,
+                                num_users=num_users, user_embed_dim=user_emb_dim,
                                 interaction_layer_dim=int_dim,
                                 interaction_layer_drop_out=int_dropout)
     else:
@@ -117,7 +129,7 @@ def nn_with_additions(w2v_modes, splex_modes, user_modes, include_time, user_ran
                                 patience=7,
                                 options=options,
                                 embed_dim=word_emb_dim,
-                                num_users=num_users,
+                                num_users=num_users, user_embed_dim=user_emb_dim,
                                 interaction_layer_dim=int_dim,
                                 interaction_layer_drop_out=int_dropout)
     experiment.cv()
@@ -148,8 +160,9 @@ if __name__ == '__main__':
     #                       int_dim=interaction_dim, int_dropout=interaction_dropout, run_num=num)
 
     # random user embeddings as context
-    for num in range(1,6):
+    for num in range(1,2):
         nn_with_additions(w2v_modes=['wl'], splex_modes=['tl'], user_modes=['po'], include_time=False,
+                          user_rand=True, user_emb_dim=32,
                           int_dim=interaction_dim, int_dropout=interaction_dropout, run_num=num)
     # for num in range(1,6):
     #     nn_with_additions(w2v_modes=['wl'], splex_modes=['tl'], user_modes=['po', 'rt'], include_time=False,
