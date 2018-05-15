@@ -13,6 +13,8 @@ from gensim.models import KeyedVectors
 from data_loader import Data_loader
 from represent_tweet_level import TweetLevel
 from represent_context import Contextifier
+from model_def import input_name_is_user_idx
+
 
 def make_word_embeds(include_w2v = True, include_splex = False):
     save_file, dim, w2v, splex = 'word_emb', 0, None, None
@@ -107,7 +109,51 @@ def make_input_name2id2np():
     pickle.dump(input_name2id2np, open(save_file, 'wb'))
     print('Saved in', save_file)
 
+def add_user_info():
+    print('Initializing Data Loader...')
+    dl = Data_loader(labeled_only=True)
+    labeled_tweets = dl.all_data()
+    print('size of labeled data:', len(labeled_tweets))
+
+    tid2post = {}
+    tid2mentions = {}
+    tid2retweet = {}
+    # need to all be arrays, even if singular features
+    for tweet in labeled_tweets:
+        tid = tweet['tweet_id']
+        tid2post[tid] = np.array([tweet['user_post']], dtype=np.int)
+        if 'user_mentions' in tweet:
+            tid2mentions[tid] = np.array(tweet['user_mentions'], dtype=np.int)
+        else:
+            tid2mentions[tid] = np.array([0], dtype=np.int)
+        if 'user_retweet' in tweet:
+            tid2retweet[tid] = np.array([tweet['user_retweet']], dtype=np.int)
+        else:
+            tid2retweet[tid] = np.array([0], dtype=np.int)
+
+    save_file = 'input_name2id2np.pkl'
+    complete_input = pickle.load(open(save_file, 'rb'))
+    complete_input['user_post'] = tid2post
+    print('post:', list(tid2post.values())[:10])
+    complete_input['user_mentions'] = tid2mentions
+    print('mentions:', list(tid2mentions.values())[:10])
+    complete_input['user_retweet'] = tid2retweet
+    print('retweet:', list(tid2retweet.values())[:10])
+    pickle.dump(complete_input, open(save_file, 'wb'))
+    print('Saved', save_file)
+
+
+def check_input():
+    save_file = 'input_name2id2np.pkl'
+    complete_input = pickle.load(open(save_file, 'rb'))
+    for input_name in complete_input:
+        if input_name_is_user_idx(input_name):
+            print(input_name)
+            id2np = complete_input[input_name]
+            for id in id2np:
+                assert('int' in str(type(id2np[id])))
+
 if __name__ == '__main__':
     # make_word_embeds(include_w2v=True, include_splex=False)
     # check_embeds('word_emb_w2v_splex.np')
-    make_input_name2id2np()
+    add_user_info()
