@@ -34,14 +34,6 @@ labeled_tids = np.loadtxt('../data/labeled_tids.np', dtype='int')
 def extract_dim_input_name2id2np(input_name2id2np):
     dim_map = {}
     for input_name in input_name2id2np:
-        if input_name_is_user_idx(input_name):
-            dim_map[input_name] = (1, )
-            '''
-            id2np = input_name2id2np[input_name]
-            for id in id2np:
-                assert('int' in str(type(input_name2id2np[input_name][id])))
-                input_name2id2np[input_name][id] = np.array([input_name2id2np[input_name][id]])
-            '''
         
         # other input_name
         id2np = input_name2id2np[input_name]
@@ -50,7 +42,7 @@ def extract_dim_input_name2id2np(input_name2id2np):
             if dim is None:
                 dim = id2np[id].shape[0]
             # asserting the dimension for the same key across all tweets is the same
-            assert(id2np[id].shape) == (dim, )
+            assert(id2np[id].shape[0] == dim)
         dim_map[input_name] = dim
 
         # asserting that labeled tweets has a corresponding input

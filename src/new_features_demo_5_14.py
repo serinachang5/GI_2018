@@ -22,7 +22,7 @@ if __name__ == '__main__':
                               'loss_user_embed': ['../weights/dummy_user_embed.np']
                               })
     input_name2id2np = ({
-                        'dummy': dict([(tid, np.array([np.random.normal(size=(300,))])) for tid in labeled_tids]),
+                        'dummy': dict([(tid, np.random.normal(size=(300,))) for tid in labeled_tids]),
                         # note that I made special treatment towards user embeddings
                         # the input name of user index must end with "user_index"
                         # or other spelling variations, see input_name_is_user_idx function in model_def.py
@@ -31,7 +31,7 @@ if __name__ == '__main__':
                         # since keras does not accept single integer as input
                         # but it is already handled on my side so you don't need to worry about that
                         'post_user_index': dict([(tid, np.array([np.random.randint(3000)])) for tid in labeled_tids]),
-                        'retweet_user_index': dict([(tid, np.random.randint(3000)) for tid in labeled_tids])
+                        'retweet_user_index': dict([(tid, np.array([np.random.randint(3000)])) for tid in labeled_tids])
                         })
     options = ['word']
     experiment = Experiment(experiment_dir='test',
