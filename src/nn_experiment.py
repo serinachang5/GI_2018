@@ -113,8 +113,7 @@ def adapt_vocab(X_train, X_list):
     threshold = 2
 
     for key in X_train:
-        if key in [option + '_content_input' for option in ['char', 'word']]:
-
+        if key in [option + '_content_input' for option in ['char', 'word']] or input_name_is_user_idx(key):
             # count the number of occurence for each word
             wc = {}
             for xs in X_train[key]:
@@ -324,6 +323,10 @@ class Experiment:
 
                     _y_pred_val_score, _y_pred_test_score = (self.model.predict(X_val).flatten(),
                                                              self.model.predict(X_test).flatten())
+                    prefix = self.experiment_dir + 'fold_%d_class_%d_' % (fold_idx, class_idx)
+                    
+                    np.savetxt(prefix + 'pred_val.np', _y_pred_val_score)
+                    np.savetxt(prefix + 'pred_test.np', _y_pred_test_score)
 
                     # threshold tuning
                     best_t, best_f_val = 0, -1
@@ -364,7 +367,16 @@ class Experiment:
                 for idx in range(num_test):
                     if y_pred_test[idx] is None:
                         y_pred_test[idx] = 2
+                
+                for idx in range(num_val):
+                    if y_pred_val[idx] is None:
+                        y_pred_val[idx] = 2
 
+            np.savetxt(self.experiment_dir + 'fold_%d_pred_val.np' % fold_idx, y_pred_val)
+            np.savetxt(self.experiment_dir + 'fold_%d_pred_test.np' % fold_idx, y_pred_test)
+            np.savetxt(self.experiment_dir + 'fold_%d_truth_val.np' % fold_idx, y_val)
+            np.savetxt(self.experiment_dir + 'fold_%d_truth_test.np' % fold_idx, y_test)
+            
             # append the result on this fold to results
             results.append(precision_recall_fscore_support(y_test, y_pred_test))
 
