@@ -333,7 +333,7 @@ class Experiment:
                     for t in np.arange(0.01, 1, 0.01):
                         y_val_pred_ = [0] * num_val
                         for idx in range(num_val):
-                            if y_pred_test[idx] is None and _y_pred_val_score[idx] >= t:
+                            if y_pred_val[idx] is None and _y_pred_val_score[idx] >= t:
                                 y_val_pred_[idx] = 1
                         f = f1_score(_y_val_, y_val_pred_)
                         if f > best_f_val:
