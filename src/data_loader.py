@@ -12,6 +12,9 @@ import pickle as pkl
 from collections import defaultdict
 from sentence_tokenizer import int_array_rep
 import numpy as np
+from data_loader_utils import get_config, subsample, get_subsample_counts
+from random import randint
+from sklearn.model_selection import StratifiedShuffleSplit
 
 
 class Data_loader:
@@ -38,6 +41,7 @@ class Data_loader:
         option: the level of tokenization, "word" or "char"
         verbose: print progress while initializing
         """
+
         self.option, self.vocab_size, self.max_len = option, vocab_size, max_len
         assert(option in ['both', 'char', 'word'])
         if option in ['char', 'word']:
@@ -174,6 +178,107 @@ class Data_loader:
         unld_tr_X, _ = self.filter_by_length(unld_tr, min_len, padded, False)
         unld_val_X, _ = self.filter_by_length(unld_val, min_len, padded, False)
         return unld_tr_X, unld_val_X
+
+    def distant_supv_data(self, config_type = 'ACL'):
+        '''
+        config_type = 'ACL' or 'EMNLP'
+        It will generate distant supv dataset such that the label distribution is identical to that of labeled data.
+        See method 'get_config' in data_loader_utils.py for more details.
+        '''
+        seed = 45345
+        assert self.option == 'word', 'self.option is not equal to \'word\''
+        config = get_config(config_type = config_type)
+        fh_e = u'\U0001f64f'.encode('utf8')
+        fh_id = self.token2property[fh_e]['id']
+        pf_e = u'\U0001f614'.encode('utf8')
+        pf_id = self.token2property[pf_e]['id']
+        g_e = u'\U0001f52b'.encode('utf8')
+        g_id = self.token2property[g_e]['id']
+        df_e = u'\U0001f608'.encode('utf8')
+        df_id = self.token2property[df_e]['id']
+
+        top_loss_ids = []
+        for emoji in config['top_loss_emojis']:
+            emoji_en = emoji.encode('utf8')
+            if emoji_en in self.token2property:
+                top_loss_ids.append(self.token2property[emoji_en]['id'])
+        print ('len(top_loss_ids): ', len(top_loss_ids))
+        top_agg_ids = []
+        for emoji in config['top_agg_emojis']:
+            emoji_en = emoji.encode('utf8')
+            if emoji_en in self.token2property:
+                top_agg_ids.append(self.token2property[emoji_en]['id'])
+        print ('len(top_agg_ids): ', len(top_agg_ids))
+
+        unld_tr, unld_val = self.unlabeled_tr_val()
+
+        X_a = []
+        X_l = []
+        X_o = []
+        for tweet_dict in unld_tr:
+            x = tweet_dict['int_arr']
+            if fh_id in x and pf_id in x:
+                # consider as loss
+                x = [v for v in x if (v != fh_id and v != pf_id)]
+                X_l.append(x + ([0] * (self.max_len - len(x))))
+                continue
+            if g_id in x and df_id in x:
+                # consider as aggression
+                x = [v for v in x if (v != g_id and v != df_id)]
+                X_a.append(x + ([0] * (self.max_len - len(x))))
+                continue
+
+            # consider for other
+            get_in = True
+            for eid in top_loss_ids:
+                if eid in x:
+                    get_in = False
+                    break
+            if not get_in:
+                continue
+            for eid in top_agg_ids:
+                if eid in x:
+                    get_in = False
+                    break
+            if get_in:
+                # select 5% of other tweets to reduce the training time and avoid too much skew
+                rv = randint(0, 99)
+                if rv in [0, 33, 65, 78, 99]:
+                    # text = re.sub(r'[^\x00-\x7F]+', '', text.encode('utf8'))
+                    X_o.append(tweet_dict['padded_int_arr'])
+
+        X_a = np.asarray(X_a)
+        X_l = np.asarray(X_l)
+        X_o = np.asarray(X_o)
+
+        print ('Before sampling:')
+        print ('Count(Aggression): ', X_a.shape)
+        print ('Count(Loss): ', X_l.shape)
+        print ('Count(Other): ', X_o.shape)
+
+        actual_counts = {'Loss': X_l.shape[0], 'Aggression': X_a.shape[0], 'Other': X_o.shape[0]}
+        ss_counts = get_subsample_counts(actual_counts, config['desired_dist'])
+
+        X_a = subsample(X_a, keep_num = ss_counts['Aggression'], seed = seed)
+        X_l = subsample(X_l, keep_num = ss_counts['Loss'], seed = seed)
+        X_o = subsample(X_o, keep_num = ss_counts['Other'], seed = seed)
+
+        print ('After sampling:')
+        print ('Count(Aggression): ', X_a.shape)
+        print ('Count(Loss): ', X_l.shape)
+        print ('Count(Other): ', X_o.shape)
+
+        X = np.concatenate((X_a, X_l, X_o), axis = 0)
+        y = np.asarray([0] * X_a.shape[0] + [1] * X_l.shape[0] + [2] * X_o.shape[0])
+
+        sss = StratifiedShuffleSplit(n_splits = 1, test_size = 0.2, random_state = seed)
+        for train_index, test_index in sss.split(X, y):
+            X_train = X[train_index]
+            y_train = y[train_index]
+            X_test = X[test_index]
+            y_test = y[test_index]
+
+        return X_train, y_train, X_test, y_test
 
     # tokenize a string and convert it to int representation given the parameters of this data loader
     def convert2int_arr(self, s):
