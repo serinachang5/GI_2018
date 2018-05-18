@@ -212,6 +212,11 @@ class Data_loader:
 
         unld_tr, unld_val = self.unlabeled_tr_val()
 
+        # mix unld_tr and unld_val
+        unld_tr = unld_tr + unld_val
+
+        print('Unlabeled data size: ', len(unld_tr))
+
         X_a = []
         X_l = []
         X_o = []

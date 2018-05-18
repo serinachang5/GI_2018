@@ -25,7 +25,7 @@ def save_as_numpy(model, save_dir, class_idx):
     pickle.dump(layers_dict, open(os.path.join(save_dir, 'pretrained_weights_as_numpy_' + str(class_idx) + '.p'), "wb"))
 
 
-def main(options = ['word'], patience = 7, save_dir = None, epochs = 100):
+def main(pretrained_weight_dirs = None, options = ['word'], patience = 7, save_dir = None, epochs = 100):
 
     dl = Data_loader(option = options[0], vocab_size = 40000)
     X_train, y_train, X_val, y_val = dl.distant_supv_data()
@@ -43,7 +43,7 @@ def main(options = ['word'], patience = 7, save_dir = None, epochs = 100):
             prefix = 'loss'
 
         # initialize a model
-        model = NN_architecture(options = options, prefix = prefix).model
+        model = NN_architecture(options = options, prefix = prefix, pretrained_weight_dirs = pretrained_weight_dirs).model
         model.compile(optimizer = 'adam', loss = 'binary_crossentropy')
 
         # create the label for this binary classification task
@@ -70,7 +70,7 @@ def main(options = ['word'], patience = 7, save_dir = None, epochs = 100):
         losses = history.history['loss']
         if np.min(losses) > 0.2:
             print ('Using Adadelta optimizer!')
-            model = NN_architecture(prefix = prefix).model
+            model = NN_architecture(options = options, prefix = prefix, pretrained_weight_dirs = pretrained_weight_dirs).model
             model.compile(optimizer = 'adadelta', loss = 'binary_crossentropy')
             model.fit(x = X_train, y = _y_train_,
                            validation_data = (X_val, _y_val_),
@@ -120,5 +120,10 @@ def main(options = ['word'], patience = 7, save_dir = None, epochs = 100):
 
 if __name__ == '__main__':
 
+    # sys.argv[1] : directory where models should be saved
+    # sys.argv[2] : path to pre-trained embeddings file
+
     # save_dir = '/home/siddharth/workspace/GI-DL/Experiments/emnlp_paper/runs/run10'
-    main(save_dir = sys.argv[1], epochs = 1)
+    pretrained_weight_dirs = ({'aggression_word_embed': [sys.argv[2]],
+                               'loss_word_embed': [sys.argv[2]]})
+    main(pretrained_weight_dirs, save_dir = sys.argv[1], epochs = 1)
