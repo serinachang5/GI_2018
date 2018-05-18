@@ -63,7 +63,7 @@ class NN_architecture:
                  drop_out=0.5,
                  filter=200, dense_size=256, embed_dim=300, kernel_range=range(1,3),
                  pretrained_weight_dirs=None, weight_in_keras=None,
-                 num_users=3000, user_embed_dim=300, user_embed_dropout=0,
+                 num_users=50, user_embed_dim=32, user_embed_dropout=0,
                  interaction_layer_dim=-1, interaction_layer_drop_out=0.5,
                  mode='cascade',
                  prefix='general'):

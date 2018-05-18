@@ -12,7 +12,7 @@ that require the minimum implementation
 from keras.callbacks import EarlyStopping, ModelCheckpoint
 from model_def import NN_architecture, input_name_is_user_idx
 from data_loader import Data_loader
-from generator_util import create_clf_data
+from generator_util import create_clf_data, create_data
 import numpy as np
 import subprocess
 from sklearn.metrics import precision_recall_fscore_support, f1_score
@@ -96,6 +96,7 @@ def macro_f1(y_true, y_pred):
         f = f + f1(y_true[:,class_idx], y_pred[:,class_idx])
     return f / nb_classes
 
+
 # calculating the classweight given the y_train
 # the weight will be inversely proprotional to the label
 # belonging to that class
@@ -135,7 +136,9 @@ def adapt_vocab(X_train, X_list):
 class Experiment:
 
     def __init__(self, experiment_dir, input_name2id2np=None, adapt_train_vocab=False,
-                 comments='', epochs=100, patience=7, **kwargs):
+                 comments='', epochs=100, patience=7, noise_function=None, filter_function=None,
+                 predict_ens_test=False,
+                 **kwargs):
         """
         an experiment class that runs cross validation
         designed to enable easy experiments with combinations of:
@@ -207,7 +210,7 @@ class Experiment:
         self.fold = 5
         self.dl = Data_loader(option='both', labeled_only=True, **kwargs)
         self.epochs, self.patience = epochs, patience
-
+        self.noise_function, self.filter_function = noise_function, filter_function
 
     # cross validation
     # write all results to the directory
@@ -222,6 +225,28 @@ class Experiment:
             fold_data = self.dl.cv_data(fold_idx)
             ((X_train, y_train), (X_val, y_val), (X_test, y_test)) = \
                 create_clf_data(self.input_name2id2np, fold_data, return_generators=False)
+            
+            # retrieving the ensemble data
+            ensemble_data = self.dl.ensemble_data()
+            X_ensemble, y_ensemble = create_data(self.input_name2id2np, ensemble_data)
+            
+            # retrieving the held-out test data
+            held_out_data = self.dl.test_data()
+            X_held_out, y_held_out = create_data(self.input_name2id2np, held_out_data)
+            
+            if self.filter_function is not None:
+                def apply_filter(X):
+                    X_filtered = {}
+                    for key in X:
+                        if 'char' in key and 'input' in key:
+                            X_filtered[key] = np.array([self.filter_function(x[:])
+                                                        for x in X[key]])
+                        else:
+                            X_filtered[key] = X[key]
+                    return X_filtered
+            
+                X_train, X_val, X_test = apply_filter(X_train), apply_filter(X_val), apply_filter(X_test)
+                X_ensemble, X_held_out = apply_filter(X_ensemble), apply_filter(X_held_out)
 
             # if no pretrained weights, adapting vocabulary so that those who appear in
             # X_train less than twice would not be counted
@@ -271,7 +296,7 @@ class Experiment:
             elif self.kwargs.get('mode') is None or self.kwargs.get('mode') == 'cascade':
 
                 # initialize the predictions
-                num_val, num_test = y_val.shape[0], y_test.shape[0]
+                num_train, num_val, num_test = y_train.shape[0], y_val.shape[0], y_test.shape[0]
                 y_pred_val, y_pred_test = [None] * num_val, [None] * num_test
 
                 for class_idx in range(2):
@@ -291,6 +316,8 @@ class Experiment:
 
                     # create the label for this binary classification task
                     _y_train_, _y_val_ = y_train[:,class_idx], y_val[:,class_idx]
+                    num_positive_train = sum(_y_train_)
+                    class_weight = {0: 1, 1: (num_train - num_positive_train) / float(num_positive_train)}
 
                     # call backs
                     es = EarlyStopping(patience=self.patience, monitor='val_loss', verbose=1)
@@ -299,12 +326,39 @@ class Experiment:
                     callbacks = [es, mc]
 
                     # training
-                    self.model.fit(x=X_train, y=_y_train_,
-                                   validation_data=(X_val, _y_val_))
-                    history = self.model.fit(x=X_train, y=_y_train_,
-                                             validation_data=(X_val, _y_val_),
-                                             callbacks=callbacks, epochs=self.epochs)
+                    if self.noise_function is None:
+                        self.model.fit(x=X_train, y=_y_train_,
+                                       validation_data=(X_val, _y_val_))
+                        history = self.model.fit(x=X_train, y=_y_train_,
+                                                 validation_data=(X_val, _y_val_),
+                                                 callbacks=callbacks, epochs=self.epochs)
+                    else:
+                        def add_noise2data(X_train):
+                            X_train_noised = {}
+                            for key in X_train:
+                                if 'char' in key and 'input' in key:
+                                    X_train_noised[key] = np.array([self.noise_function(x[:])
+                                                                    for x in X_train[key]])
+                                else:
+                                    X_train_noised[key] = X_train[key]
+                            return X_train_noised
+        
+                        self.model.fit(x=add_noise2data(X_train), y=_y_train_)
+                                       
+                        best_val_loss, best_epoch = float('inf'), 0
+                        for epoch_idx in range(1, self.epochs + 1):
+                            self.model.fit(x=add_noise2data(X_train), y=_y_train_)
+                            val_loss = self.model.evaluate(x=X_val, y=_y_val_)
+                            print('validation loss for epoch %d: %.3f' % (epoch_idx, val_loss))
+                            if val_loss < best_val_loss:
+                                best_epoch = epoch_idx
+                                best_val_loss = val_loss
+                                self.model.save_weights(weight_dir)
 
+                            if epoch_idx - best_epoch >= self.patience:
+                                break
+                        
+                    '''
                     # sometimes adam will stuck at a saddle point
                     # if adam does not work, use adadelta
                     # which will not get stuck but have lower performance
@@ -318,15 +372,20 @@ class Experiment:
                         with open(self.experiment_dir + 'README', 'a') as readme:
                             readme.write('fold %d class %d takes using ada-delta optimizer\n'
                                          % (fold_idx, class_idx))
-                            
+                    '''
                     self.model.load_weights(weight_dir)
 
                     _y_pred_val_score, _y_pred_test_score = (self.model.predict(X_val).flatten(),
                                                              self.model.predict(X_test).flatten())
+                    _y_pred_ensemble_score, _y_pred_held_out_score = (self.model.predict(X_ensemble).flatten(),
+                                                                      self.model.predict(X_held_out).flatten())
+                    
                     prefix = self.experiment_dir + 'fold_%d_class_%d_' % (fold_idx, class_idx)
                     
                     np.savetxt(prefix + 'pred_val.np', _y_pred_val_score)
                     np.savetxt(prefix + 'pred_test.np', _y_pred_test_score)
+                    np.savetxt(prefix + 'pred_ensemble.np', _y_pred_ensemble_score)
+                    np.savetxt(prefix + 'pred_held_out.np', _y_pred_held_out_score)
 
                     # threshold tuning
                     best_t, best_f_val = 0, -1
