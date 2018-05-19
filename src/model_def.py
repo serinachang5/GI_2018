@@ -199,7 +199,7 @@ class NN_architecture:
         self.model.summary()
         for layer_name in self.pretrained_weight_dirs:
             if layer_name in layer_dict:
-                layer_dict[layer_name].set_weights([np.loadtxt(weight_dir)
+                layer_dict[layer_name].set_weights([np.loadtxt(weight_dir) if type(weight_dir) == str else weight_dir
                                                     for weight_dir in self.pretrained_weight_dirs[layer_name]])
                 print('weight of layer %s successfully loaded.' % layer_name)
 
