@@ -72,7 +72,7 @@ def nn_with_additions(w2v_modes, splex_modes, user_modes, include_time,
             if user_emb_dim == 300:
                 user_emb_agg = 'user_emb_700_agg_rand_300.np'
                 user_emb_loss = 'user_emb_700_loss_rand_300.np'
-            else:
+            elif:
                 user_emb_agg = 'user_emb_700_agg_rand_32.np'
                 user_emb_loss = 'user_emb_700_loss_rand_32.np'
         else:
