@@ -306,7 +306,6 @@ class Experiment:
                 y_pred = np.argmax(y_pred, axis=-1)
 
             elif self.kwargs.get('mode') is None or self.kwargs.get('mode') == 'cascade':
-
                 # initialize the predictions
                 num_train, num_val, num_test = y_train.shape[0], y_val.shape[0], y_test.shape[0]
                 y_pred_val, y_pred_test = [None] * num_val, [None] * num_test
@@ -321,9 +320,14 @@ class Experiment:
                         self.kwargs['prefix'] = 'aggression'
                     else:
                         self.kwargs['prefix'] = 'loss'
-
+                
                     # initialize a model
-                    self.model = NN_architecture(**self.kwargs).model
+                    if not self.by_fold:
+                        self.model = NN_architecture(**self.kwargs).model
+                    else:
+                        self.kwargs['pretrained_weight_dirs'] = self.pretrained_weight_dirs[fold_idx]
+                        self.model = NN_architecture(**self.kwargs).model
+
                     self.model.compile(optimizer='adam', loss='binary_crossentropy')
 
                     # create the label for this binary classification task
