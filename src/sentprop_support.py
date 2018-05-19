@@ -12,8 +12,8 @@ import numpy as np
 import pickle
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
-print('Initializing Data Loader')
-dl = Data_loader()
+# print('Initializing Data Loader')
+# dl = Data_loader()
 
 '''SET-UP'''
 # pickle in protocol 2 because SENTPROP is in Python 2
@@ -157,6 +157,69 @@ def sample_usage():
         else:
             print('No embedding found for', dl.convert2unicode([int(idx)]),  idx)
 
+def check_splex_top_k(mode, k=100, print_top=True):
+    assert(mode == 'loss' or mode == 'agg' or mode == 'sub')
+    splex = pickle.load(open('../data/splex_minmax_svd_word_s300_seeds_hc.pkl', 'rb'))
+    if mode == 'loss':
+        mode_idx = 0
+    elif mode == 'agg':
+        mode_idx = 1
+    else:
+        mode_idx = 2
+
+    tuples = [(k, splex[k][mode_idx]) for k in splex]
+    tuples = sorted(tuples, key=lambda x: x[1], reverse=True)
+
+    if print_top:
+        dl = Data_loader(labeled_only=True)
+        row_format = '{:<7}' * 2 + '{:<15}' * 2
+        print(row_format.format('Rank', 'Index', 'Unicode', 'SPLex {} Score (minmax scaling)'.format(mode.capitalize())))
+        for rank, (idx, score) in enumerate(tuples[:k]):
+            print(row_format.format(rank, idx, dl.convert2unicode([int(idx)]), round(score, 5)))
+
+    return tuples[:k]
+
+def get_id_to_rank(mode):
+    assert(mode == 'loss' or mode == 'agg' or mode == 'sub')
+    splex = pickle.load(open('../data/splex_minmax_svd_word_s300_seeds_hc.pkl', 'rb'))
+    if mode == 'loss':
+        mode_idx = 0
+    elif mode == 'agg':
+        mode_idx = 1
+    else:
+        mode_idx = 2
+
+    tuples = [(idx, splex[idx][mode_idx]) for idx in splex]
+    tuples = sorted(tuples, key=lambda x: x[1], reverse=True)
+
+    id2rank = {}
+    for rank, (idx, score) in enumerate(tuples):
+        id2rank[int(idx)] = (rank, score)
+    return id2rank
+
+def save_id_to_ranks():
+    class2id2rank = {}
+    class2id2rank['Loss'] = get_id_to_rank(mode='loss')
+    class2id2rank['Aggression'] = get_id_to_rank(mode='agg')
+    class2id2rank['Substance'] = get_id_to_rank(mode='sub')
+    pickle.dump(class2id2rank, open('class2id2rank.pkl', 'wb'))
+
+def check_id_to_rank():
+    class2id2rank = pickle.load(open('class2id2rank.pkl', 'rb'))
+    loss_id2rank = class2id2rank['Loss']
+    print(len(loss_id2rank))
+    top_100_loss = check_splex_top_k(mode='loss', k=100, print_top=False)
+    for rank, (idx, score) in enumerate(top_100_loss):
+        assert(loss_id2rank[int(idx)][0] == rank)
+        assert(loss_id2rank[int(idx)][1] == score)
+
+def find_gun(idx):
+    dl = Data_loader(labeled_only=True)
+    if idx is None:
+        for idx in range(100, 200):
+            print(idx, dl.convert2unicode([idx]))
+    else:
+        print(idx, dl.convert2unicode([idx]))
 
 if __name__ == '__main__':
     # PREP FOR SENTPROP
@@ -178,9 +241,17 @@ if __name__ == '__main__':
     # splex = pickle.load(open('../data/splex_minmax_svd_word_s300_seeds_hc.pkl', 'rb'))
     # save_loss_agg_balanced(splex, specs='minmax_svd_word_s300_seeds_hc')
 
-    splex = pickle.load(open('../data/splex_standard_svd_word_s300_seeds_hc.pkl', 'rb'))
-    loss, agg, sub = pickle.load(open('../data/seeds_hc_idx_p2.pkl', 'rb'))
-    eval_seeds(loss, agg, sub, splex)
-    eval_top_words(splex)
+    # splex = pickle.load(open('../data/splex_standard_svd_word_s300_seeds_hc.pkl', 'rb'))
+    # loss, agg, sub = pickle.load(open('../data/seeds_hc_idx_p2.pkl', 'rb'))
+    # eval_seeds(loss, agg, sub, splex)
+    # eval_top_words(splex)
 
     # sample_usage()
+    # check_splex_top_k(mode='agg', k=300, print_top=True)
+    # save_id_to_ranks()
+    # check_id_to_rank()
+    find_gun(178)
+    class2id2rank = pickle.load(open('class2id2rank.pkl', 'rb'))
+    print(class2id2rank['Loss'][178])
+    print(class2id2rank['Aggression'][178])
+    print(class2id2rank['Substance'][178])

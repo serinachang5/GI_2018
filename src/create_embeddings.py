@@ -15,6 +15,7 @@ import numpy as np
 import pickle
 from sentence_tokenizer import unicode_rep
 from sklearn.feature_extraction.text import CountVectorizer
+from csv import DictReader
 
 
 def generate_w2v_embs(sentences, option):
@@ -153,34 +154,53 @@ def main(args):
 	option = args['option']
 	print('Initializing Data Loader')
 	dl = Data_loader(option=option)
+	all_data = dl.all_data()
+	print('Len of all data:', len(all_data))
+	test_ids = set([tweet['tweet_id'] for tweet in dl.test_data()])
+	print('Len of test data:', len(test_ids))
+	ensemble_ids = get_ensemble_tids()
+	print('Len of ensemble data:', len(ensemble_ids))
 
 	mode = args['mode']
 	assert(mode == 'w2v' or mode == 'svd' or mode == 'd2v')
 	if mode == 'w2v':
 		sentences = []
-		for tweet in dl.all_data():
+		for tweet in all_data:
 			# need indices split
-			sentences.append([str(x) for x in tweet['int_arr']])
+			if tweet['tweet_id'] not in test_ids and tweet['tweet_id'] not in ensemble_ids:
+				sentences.append([str(x) for x in tweet['int_arr']])
+		print('Num sentences:', len(sentences))
 		print('Check sentence0:', sentences[0])
 		generate_w2v_embs(sentences, option)
 	elif mode == 'svd':
 		sentences = []
-		for tweet in dl.all_data():
+		for i, tweet in enumerate(all_data):
 			# need indices joined
-			sentences.append(' '.join([str(x) for x in tweet['int_arr']]))
+			if tweet['tweet_id'] not in test_ids and tweet['tweet_id'] not in ensemble_ids:
+				sentences.append(' '.join([str(x) for x in tweet['int_arr']]))
+		print('Num sentences:', len(sentences))
 		print('Check sentence0:', sentences[0])
 		generate_svd_embs(sentences, option)
 	else:  # mode == d2v
 		sentences = []
 		tags = []
-		for tweet in dl.all_data():
-			# need indices split and use id's as tags
-			sentences.append([str(x) for x in tweet['int_arr']])
-			tags.append([str(tweet['tweet_id'])])
+		for tweet in all_data:
+			if tweet['tweet_id'] not in test_ids and tweet['tweet_id'] not in ensemble_ids:
+				# need indices split and use id's as tags
+				sentences.append([str(x) for x in tweet['int_arr']])
+				tags.append([str(tweet['tweet_id'])])
+		print('Num sentences:', len(sentences))
 		print('Check sentence0:', sentences[0])
 		print('Check tag0:', tags[0])
 		generate_d2v_embs(sentences, tags, option)
 
+def get_ensemble_tids():
+	tids = set()
+	with open('../../datasets/2017_11_27/ensemble.csv') as f:
+		reader = DictReader(f)
+		for row in reader:
+			tids.add(row['tweet_id'])
+	return tids
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description = '')
@@ -195,7 +215,20 @@ if __name__ == '__main__':
 	args = vars(parser.parse_args())
 	print(args)
 
-	main(args)
+	# main(args)
+	option = args['option']
+	print('Initializing Data Loader')
+	dl = Data_loader(option=option)
+	all_data = dl.all_data()
+	all_tids = set([str(tweet['tweet_id']) for tweet in all_data])
+	print(list(all_tids)[:10])
+	print('Len of all data:', len(all_data))
+	test_ids = set([tweet['tweet_id'] for tweet in dl.test_data()])
+	print('Len of test data:', len(test_ids))
+	ensemble_ids = get_ensemble_tids()
+	print('Len of ensemble data:', len(ensemble_ids))
+	print(list(ensemble_ids)[:10])
+	assert(len(ensemble_ids.intersection(all_tids)) == 0)
 
 	# w2v_file = '../data/w2v_word_s300_w5_mc5_ep20.bin'
 	# svd_file = '../data/svd_word_s300.pkl'
