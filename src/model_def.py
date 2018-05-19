@@ -63,7 +63,7 @@ class NN_architecture:
                  drop_out=0.5,
                  filter=200, dense_size=256, embed_dim=300, kernel_range=range(1,3),
                  pretrained_weight_dirs=None, weight_in_keras=None,
-                 num_users=3000, user_embed_dim=300, user_embed_dropout=0,
+                 num_users=50, user_embed_dim=32, user_embed_dropout=0,
                  interaction_layer_dim=-1, interaction_layer_drop_out=0.5,
                  mode='cascade',
                  prefix='general'):
@@ -199,7 +199,7 @@ class NN_architecture:
         self.model.summary()
         for layer_name in self.pretrained_weight_dirs:
             if layer_name in layer_dict:
-                layer_dict[layer_name].set_weights([np.loadtxt(weight_dir)
+                layer_dict[layer_name].set_weights([np.loadtxt(weight_dir) if type(weight_dir) == str else weight_dir
                                                     for weight_dir in self.pretrained_weight_dirs[layer_name]])
                 print('weight of layer %s successfully loaded.' % layer_name)
 
