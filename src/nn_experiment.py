@@ -137,7 +137,7 @@ class Experiment:
 
     def __init__(self, experiment_dir, input_name2id2np=None, adapt_train_vocab=False,
                  comments='', epochs=100, patience=7, noise_function=None, filter_function=None,
-                 predict_ens_test=False,
+                 predict_ens_test=True, by_fold=False,
                  **kwargs):
         """
         an experiment class that runs cross validation
@@ -198,12 +198,14 @@ class Experiment:
         subprocess.call(['rm', '-rf', experiment_dir])
         subprocess.call(['mkdir', experiment_dir])
         self.adapt_train_vocab = adapt_train_vocab
-        
+        self.predict_ens_test = predict_ens_test
+        '''
         with open(self.experiment_dir + 'README', 'w') as readme:
+            
             readme.write(comments + '\n')
             for key in kwargs:
                 readme.write("%s: %s\n" % (str(key), str(kwargs[key])))
-
+        '''
         if input_name2id2np is None:
             input_name2id2np = {}
         self.input_name2id2np = input_name2id2np
@@ -211,6 +213,8 @@ class Experiment:
         self.dl = Data_loader(option='both', labeled_only=True, **kwargs)
         self.epochs, self.patience = epochs, patience
         self.noise_function, self.filter_function = noise_function, filter_function
+        self.pretrained_weight_dirs = self.kwargs.get('pretrained_weight_dirs')
+        self.by_fold = by_fold
 
     # cross validation
     # write all results to the directory
@@ -225,14 +229,15 @@ class Experiment:
             fold_data = self.dl.cv_data(fold_idx)
             ((X_train, y_train), (X_val, y_val), (X_test, y_test)) = \
                 create_clf_data(self.input_name2id2np, fold_data, return_generators=False)
+        
+            if self.predict_ens_test:
+                # retrieving the ensemble data
+                ensemble_data = self.dl.ensemble_data()
+                X_ensemble, y_ensemble = create_data(self.input_name2id2np, ensemble_data)
             
-            # retrieving the ensemble data
-            ensemble_data = self.dl.ensemble_data()
-            X_ensemble, y_ensemble = create_data(self.input_name2id2np, ensemble_data)
-            
-            # retrieving the held-out test data
-            held_out_data = self.dl.test_data()
-            X_held_out, y_held_out = create_data(self.input_name2id2np, held_out_data)
+                # retrieving the held-out test data
+                held_out_data = self.dl.test_data()
+                X_held_out, y_held_out = create_data(self.input_name2id2np, held_out_data)
             
             if self.filter_function is not None:
                 def apply_filter(X):
@@ -246,12 +251,15 @@ class Experiment:
                     return X_filtered
             
                 X_train, X_val, X_test = apply_filter(X_train), apply_filter(X_val), apply_filter(X_test)
-                X_ensemble, X_held_out = apply_filter(X_ensemble), apply_filter(X_held_out)
+                if self.predict_ens_test:
+                    X_ensemble, X_held_out = apply_filter(X_ensemble), apply_filter(X_held_out)
 
             # if no pretrained weights, adapting vocabulary so that those who appear in
             # X_train less than twice would not be counted
-            if self.adapt_train_vocab:
-                    adapt_vocab(X_train, (X_val, X_test))
+            if self.adapt_train_vocab and self.predict_ens_test:
+                adapt_vocab(X_train, (X_val, X_test, X_ensemble, X_held_out))
+            else:
+                adapt_vocab(X_train, (X_val, X_held_out))
 
             class_weight = calculate_class_weight(y_train)
 
@@ -263,7 +271,11 @@ class Experiment:
             y_test = np.argmax(y_test, axis=-1)
             
             if self.kwargs.get('mode') == 'ternary':
-                self.model = NN_architecture(**self.kwargs).model
+                if not self.by_fold:
+                    self.model = NN_architecture(**self.kwargs).model
+                else:
+                    self.kwargs['pretrained_weight_dirs'] = self.pretrained_weight_dirs[fold_idx]
+                    self.model = NN_architecture(**self.kwargs).model
                 self.model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=[macro_f1])
 
                 # call backs
@@ -377,15 +389,18 @@ class Experiment:
 
                     _y_pred_val_score, _y_pred_test_score = (self.model.predict(X_val).flatten(),
                                                              self.model.predict(X_test).flatten())
-                    _y_pred_ensemble_score, _y_pred_held_out_score = (self.model.predict(X_ensemble).flatten(),
-                                                                      self.model.predict(X_held_out).flatten())
+                    if self.predict_ens_test:
+                        _y_pred_ensemble_score, _y_pred_held_out_score = (self.model.predict(X_ensemble).flatten(),
+                                                                          self.model.predict(X_held_out).flatten())
                     
                     prefix = self.experiment_dir + 'fold_%d_class_%d_' % (fold_idx, class_idx)
                     
                     np.savetxt(prefix + 'pred_val.np', _y_pred_val_score)
                     np.savetxt(prefix + 'pred_test.np', _y_pred_test_score)
-                    np.savetxt(prefix + 'pred_ensemble.np', _y_pred_ensemble_score)
-                    np.savetxt(prefix + 'pred_held_out.np', _y_pred_held_out_score)
+                    
+                    if self.predict_ens_test:
+                        np.savetxt(prefix + 'pred_ensemble.np', _y_pred_ensemble_score)
+                        np.savetxt(prefix + 'pred_held_out.np', _y_pred_held_out_score)
 
                     # threshold tuning
                     best_t, best_f_val = 0, -1
