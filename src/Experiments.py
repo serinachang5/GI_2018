@@ -53,7 +53,7 @@ def nn_with_additions(w2v_modes, splex_modes, user_modes, include_time,
 
     # set word embedding
     if 'wl' in w2v_modes and 'wl' in splex_modes:
-        word_emb = 'word_emb_w2v_splex.np'
+        word_emb = 'word_emb_w2v_splex_ptb.np'
         word_emb_dim = 302
     elif 'wl' in w2v_modes:
         word_emb = 'word_emb_w2v.np'
@@ -97,6 +97,10 @@ def nn_with_additions(w2v_modes, splex_modes, user_modes, include_time,
     all_inputs = pickle.load(open('all_inputs.pkl', 'rb'))
     if 'tl' in splex_modes:
         input_name2id2np['splex_tl'] = all_inputs['splex_tl']
+    if 'exp' in splex_modes:
+        input_name2id2np['splex_exp'] = all_inputs['splex_exp_5']
+    if 'win' in splex_modes:
+        input_name2id2np['splex_win'] = all_inputs['splex_win_7']
     if 'cl' in w2v_modes:
         input_name2id2np['w2v_cl'] = all_inputs['w2v_cl']
     if 'cl' in splex_modes:
@@ -161,7 +165,7 @@ if __name__ == '__main__':
 
     # random user embeddings as context
     for num in range(1,2):
-        nn_with_additions(w2v_modes=['wl'], splex_modes=['tl'], user_modes=['po'], include_time=False,
+        nn_with_additions(w2v_modes=['wl'], splex_modes=['tl', 'exp'], user_modes=[], include_time=False,
                           user_rand=True, user_emb_dim=32,
                           int_dim=interaction_dim, int_dropout=interaction_dropout, run_num=num)
     # for num in range(1,6):

@@ -18,8 +18,8 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.svm import SVC
 
-print('Initializing Data Loader...')
-dl = Data_loader()
+# print('Initializing Data Loader...')
+# dl = Data_loader()
 
 def init_models():
     models = {}
@@ -172,11 +172,9 @@ def cross_validate(dl, models):
         print('Fold:', fold_i)
         tr,val,tst = dl.cv_data(fold_i)
 
-        # if tuning parameters, test on val; else, train on train+val and test on test
+        # if tuning parameters, test on val; else, test on test
         if args['tuning']:
             tst = val
-        else:
-            tr += val
 
         print('Transforming training data...')
         X, y = transform_data(tr, models)
@@ -390,7 +388,7 @@ def test_cl_combos():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description = '')
-    parser.add_argument('-w', '--weights', type = str, default = 'dynamic', help = 'weights for SVM: \'dynamic\' or \'static\'')
+    parser.add_argument('-w', '--weights', type = str, default = 'static', help = 'weights for SVM: \'dynamic\' or \'static\'')
 
     parser.add_argument('-iu', '--include_unigrams', type = bool, default = True, help = 'whether to include unigrams')
     parser.add_argument('-usize', '--unigram_size', type = int, default = 10000, help = 'number of unigrams to include')
@@ -425,9 +423,9 @@ if __name__ == '__main__':
     args = vars(parser.parse_args())
     print(args)
 
-    run_experiment()
+    # run_experiment()
     # test_tl_combos()
     # test_cl_combos()
 
-    # per_class = pickle.load(open('../cv_results/uni_10000_tst.pkl', 'rb'))[1]
-    # print_scores(per_class)
+    per_class = pickle.load(open('../cv_results/WT_ST_minmax_WC_60_0.5_rt_STAT_TST.pkl', 'rb'))[1]
+    print_scores(per_class)

@@ -117,6 +117,11 @@ class TweetLevel:
         for tweet_id in self.tweet_dict:
             yield tweet_id, self.get_representation(tweet_id, mode=mode)
 
+    def get_all_labeled_representations(self, mode = 'avg'):
+        labeled_tids = np.loadtxt('../data/labeled_tids.np', dtype='int')
+        for tweet_id in labeled_tids:
+            yield tweet_id, self.get_representation(tweet_id, mode=mode)
+
     # get dimension of tweet-level representation
     def get_dimension(self):
         if self.emb_type == 'd2v':
@@ -222,8 +227,7 @@ def write_reps_to_file(emb_type, rep_modes = None):
             print('\nWriting embeddings to', fname)
             with open(fname, 'w') as f:
                 count = 0
-                for id,rep in tl.get_all_representations(mode=rm):
-                    if count % 50000 == 0: print(count)
+                for id,rep in tl.get_all_labeled_representations(mode=rm):
                     f.write(str(id) + '\t')
                     rep = [str(x) for x in rep]
                     f.write(','.join(rep) + '\n')
@@ -234,8 +238,7 @@ def write_reps_to_file(emb_type, rep_modes = None):
         print('\nWriting embeddings to', fname)
         with open(fname, 'w') as f:
             count = 0
-            for id,rep in tl.get_all_representations():  # no mode to specify
-                if count % 50000 == 0: print(count)
+            for id,rep in tl.get_all_labeled_representations():  # no mode to specify
                 f.write(str(id) + '\t')
                 rep = [str(x) for x in rep]
                 f.write(','.join(rep) + '\n')
@@ -293,9 +296,9 @@ def check_corr():
 
 
 if __name__ == '__main__':
-    # modes = ['max', 'min']
-    # write_reps_to_file(emb_type='w2v', rep_modes=modes)
+    modes = ['sum']
+    write_reps_to_file(emb_type='splex', rep_modes=modes)
     # write_reps_to_file(emb_type='splex', rep_modes=modes)
     # check_written_embeddings(emb_type='splex', rep_mode='avg')
 
-    test_TL('w2v')
+    # test_TL('w2v')

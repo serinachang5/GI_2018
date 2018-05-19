@@ -15,6 +15,7 @@ from represent_tweet_level import TweetLevel
 from represent_context import Contextifier
 from model_def import input_name_is_user_idx
 from sklearn.preprocessing import StandardScaler
+import random
 
 def init_tl(emb_type):
     if emb_type == 'w2v':
@@ -77,6 +78,33 @@ def make_word_embeds(include_w2v = True, include_splex = False):
             else:
                 embeds[idx][-2:] = splex['1']
 
+    np.savetxt(save_file, embeds)
+    print('Saved embeddings in', save_file)
+
+def make_perturbed_word_embs():
+    w2v = KeyedVectors.load_word2vec_format('../data/w2v_word_s300_w5_mc5_ep20.bin', binary=True)
+    splex_w_sub = pickle.load(open('../data/splex_minmax_svd_word_s300_seeds_hc.pkl', 'rb'))
+    splex = dict((idx, splex_w_sub[idx][:2]) for idx in splex_w_sub)  # exclude substance scores
+    vocab_size = 40000
+    embeds = np.zeros((vocab_size, 310), dtype=np.float)
+    for idx in range(1, vocab_size):
+        str_idx = str(idx)
+        if str_idx in w2v.vocab:
+            embeds[idx][:300] = w2v[str_idx]  # first 300 dims
+        else:
+            embeds[idx][:300] = w2v['1']
+        if str_idx in splex:
+            splex_score = splex[str_idx]
+        else:
+            splex_score = splex['1']
+        versions = []
+        for i in range(5):
+            p1 = random.gauss(mu=1.0, sigma=.001)
+            versions.append(splex_score[0] * p1)
+            p2 = random.gauss(mu=1.0, sigma=.001)
+            versions.append(splex_score[1] * p2)
+        embeds[idx][-10:] = versions
+    save_file = 'word_emb_w2v_splex_ptb.np'
     np.savetxt(save_file, embeds)
     print('Saved embeddings in', save_file)
 
@@ -207,10 +235,96 @@ def edit_inputs_pkl():
     pickle.dump(inputs, open(save_file, 'wb'))
     print('Edited inputs, saved in', save_file)
 
+
+# splex expanded is a feature that includes the splex summed scores of the last x tweets
+def add_splex_expanded(num_tweets = 5):
+    print('Initializing Data Loader...')
+    dl = Data_loader()
+    user2tweets = dl.data['user_time_ind']  # already sorted by time
+    print('Num users:', len(user2tweets))
+
+    tid2tuple = {}
+    for user_id in user2tweets:
+        tweet_ids = user2tweets[user_id]
+        for id_by_user, tid in enumerate(tweet_ids):
+            tid2tuple[tid] = (user_id, id_by_user)
+
+    splex_tl = init_tl('splex')
+    labeled_tids = np.loadtxt('../data/labeled_tids.np', dtype='int')
+    splex_expanded = {}
+    for tid in labeled_tids:
+        feature = np.zeros(num_tweets * 2, dtype=np.float)  # padding
+        if tid in tid2tuple: # possible it was written by a user with < 2 tweets, so they are not in user2tweets
+            user_id, id_by_user = tid2tuple[tid]
+            num_back = 1
+            while num_back <= num_tweets and id_by_user-num_back >= 0:
+                prev_tid = user2tweets[user_id][id_by_user-num_back]
+                feat_start = (num_back-1) * 2
+                feature[feat_start:feat_start+2] = splex_tl.get_representation(prev_tid, mode='sum')
+                num_back += 1
+        splex_expanded[tid] = feature
+
+    save_file = 'all_inputs.pkl'
+    inputs = pickle.load(open(save_file, 'rb'))
+    input_name = 'splex_exp_' + str(num_tweets)
+    inputs[input_name] = splex_expanded
+    pickle.dump(inputs, open(save_file, 'wb'))
+    print('Added', input_name, 'to', save_file)
+
+# splex window is a feature that includes the splex summed scores from the last x days
+def add_splex_window(num_days = 5):
+    print('Initializing Data Loader...')
+    dl = Data_loader()
+    user2tweets = dl.data['user_time_ind']  # already sorted by time
+    print('Num users:', len(user2tweets))
+
+    tid2tuple = {}
+    for user_id in user2tweets:
+        tweet_ids = user2tweets[user_id]
+        for id_by_user, tid in enumerate(tweet_ids):
+            tid2tuple[tid] = (user_id, id_by_user)
+
+    splex_tl = init_tl('splex')
+    labeled_tids = np.loadtxt('../data/labeled_tids.np', dtype='int')
+    splex_window = {}
+    for tid in labeled_tids:
+        feature = np.zeros(num_days * 2, dtype=np.float)  # padding
+        if tid in tid2tuple:  # possible it was written by a user with < 2 tweets, so they are not in user2tweets
+            curr_tweet = dl.get_records_by_idxes([tid])[0]
+            curr_time = curr_tweet['created_at']
+            user_id, id_by_user = tid2tuple[tid]
+            prev_id_by_user = id_by_user-1
+            while prev_id_by_user >= 0:
+                prev_tid = user2tweets[user_id][prev_id_by_user]
+                prev_tweet = dl.get_records_by_idxes([prev_tid])[0]
+                prev_time = prev_tweet['created_at']
+                diff_in_sec = (curr_time - prev_time).total_seconds()
+                diff_in_min = diff_in_sec / 60
+                diff_in_hour = diff_in_min / 60
+                diff_in_day = int(diff_in_hour / 24)
+                if diff_in_day < num_days:
+                    feat_start = diff_in_day * 2
+                    feature[feat_start:feat_start+2] += splex_tl.get_representation(prev_tid, mode='sum')
+                else:
+                    break
+                prev_id_by_user -= 1
+        splex_window[tid] = feature
+
+    save_file = 'all_inputs.pkl'
+    inputs = pickle.load(open(save_file, 'rb'))
+    input_name = 'splex_win_' + str(num_days)
+    inputs[input_name] = splex_window
+    pickle.dump(inputs, open(save_file, 'wb'))
+    print('Added', input_name, 'to', save_file)
+
+
 if __name__ == '__main__':
     # make_word_embeds(include_w2v=True, include_splex=False)
     # check_embeds('word_emb_w2v_splex.np')
     # add_user_info()
-    make_user_embeds(emb_type='loss_rand', num_users=700, user_emb_dim=32)
+    # make_user_embeds(emb_type='loss_rand', num_users=700, user_emb_dim=32)
     # make_inputs(num_users=700)
     # edit_inputs_pkl()
+    # add_splex_expanded(num_tweets=5)
+    # add_splex_window(num_days=7)
+    make_perturbed_word_embs()
