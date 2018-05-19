@@ -347,29 +347,6 @@ class Contextifier:
                 ct_emb_str = ' '.join([str(x) for x in ct_emb])
                 writer.writerow([tweet_id, ct_emb_str])
 
-# write context-level representations to file
-def write_reps_to_file(emb_type, rep_modes = None):
-    assert(emb_type == 'w2v' or emb_type == 'splex')
-    if emb_type == 'w2v':
-        tl = TweetLevel(emb_file='../data/w2v_word_s300_w5_mc5_ep20.bin')
-    elif emb_type == 'splex':
-        tl = TweetLevel(emb_file='../data/splex_minmax_svd_word_s300_seeds_hc.pkl')
-    else:
-        tl = TweetLevel(emb_file='../data/d2v_word_s300_w5_mc5_ep20.mdl')
-
-    if emb_type == 'w2v' or emb_type == 'splex':
-        assert(rep_modes is not None)
-        for rm in rep_modes:
-            fname = '../reps/' + emb_type + '_' + rm + '.txt'
-            print('\nWriting embeddings to', fname)
-            with open(fname, 'w') as f:
-                count = 0
-                for id,rep in tl.get_all_labeled_representations(mode=rm):
-                    f.write(str(id) + '\t')
-                    rep = [str(x) for x in rep]
-                    f.write(','.join(rep) + '\n')
-                    count += 1
-            print('Done. Wrote {} embeddings'.format(count))
 
 if __name__ == '__main__':
 

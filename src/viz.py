@@ -23,7 +23,7 @@ from sklearn.preprocessing import MinMaxScaler
 def plot_tweets(labeled_tweets, emb_type, want_labels = None, rep_mode = None, include_sub = True, force_TSNE = False):
     assert(emb_type == 'w2v' or emb_type == 'splex' or emb_type == 'd2v')
     if emb_type == 'w2v':
-        tl = TweetLevel(emb_file='../data/w2v_word_s300_w5_mc5_ep20.bin')
+        tl = TweetLevel(emb_file='../data/w2v_word_s200_w5_mc5_ep20.bin')
         assert(rep_mode is not None)
     elif emb_type == 'splex':
         tl = TweetLevel(emb_file='../data/splex_minmax_svd_word_s300_seeds_hc.pkl')
@@ -71,8 +71,8 @@ def visualize_labeled_dataset():
     labeled_tweets = [(x['tweet_id'], x['label']) for x in labeled_tweets]
     print('Number of labeled tweets:', len(labeled_tweets))
 
-    plot_tweets(labeled_tweets, emb_type='splex', rep_mode='sum', include_sub=False, force_TSNE=True)
-    # plot_tweets(labeled_tweets, emb_type='w2v', rep_mode='avg')
+    # plot_tweets(labeled_tweets, emb_type='splex', rep_mode='sum', include_sub=False, force_TSNE=True)
+    plot_tweets(labeled_tweets, emb_type='w2v', rep_mode='avg')
 
 
 '''Functions to visualize how Loss and Aggression interact for a given user over time, using SPLex tweet-level scores.'''
