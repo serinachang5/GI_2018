@@ -8,6 +8,7 @@ import sys
 import os
 import numpy as np
 import pickle
+import argparse
 from model_def import NN_architecture
 from keras.callbacks import EarlyStopping, ModelCheckpoint
 from sklearn.metrics import f1_score
@@ -25,9 +26,13 @@ def save_as_numpy(model, save_dir, class_idx):
     pickle.dump(layers_dict, open(os.path.join(save_dir, 'pretrained_weights_as_numpy_' + str(class_idx) + '.p'), "wb"))
 
 
-def main(pretrained_weight_dirs = None, options = ['word'], patience = 7, save_dir = None, epochs = 100):
+def train(pretrained_weight_dirs = None, options = ['word'], patience = 7, save_dir = None, epochs = 100):
 
-    dl = Data_loader(option = options[0], vocab_size = 40000)
+    if options[0] == 'word':
+        dl = Data_loader(option = 'word')
+    else:
+        dl = Data_loader(option = 'char', vocab_size = 1200, max_len = 150)
+
     X_train, y_train, X_val, y_val = dl.distant_supv_data(subsample_enabled = False)
     # initialize the predictions
     num_val = y_val.shape[0]
@@ -118,12 +123,32 @@ def main(pretrained_weight_dirs = None, options = ['word'], patience = 7, save_d
     print(classification_report(y_val, y_pred_val, target_names = ['Aggression', 'Loss', 'Other'], digits = 4))
 
 
-if __name__ == '__main__':
+def parse_arguments():
+
+    parser = argparse.ArgumentParser(description = '')
+    parser.add_argument('-sd', '--save-dir', type = str, required = True, help = 'directory where the model should be saved.')
+    parser.add_argument('-ef', '--emb-file', type = str, help = 'path to pre-trained embeddings file.')
+    parser.add_argument('-ch', '--char', type = bool, default = False, help = 'Whether to process at word level or char level')
+    args = parser.parse_args()
+    return args
+
+
+def main(args):
 
     # sys.argv[1] : directory where models should be saved
     # sys.argv[2] : path to pre-trained embeddings file
 
     # save_dir = '/home/siddharth/workspace/GI-DL/Experiments/emnlp_paper/runs/run10'
-    pretrained_weight_dirs = ({'aggression_word_embed': [sys.argv[2]],
-                               'loss_word_embed': [sys.argv[2]]})
-    main(pretrained_weight_dirs, save_dir = sys.argv[1], epochs = 1)
+    pretrained_weight_dirs = ({'aggression_word_embed': [args.emb_file], 'loss_word_embed': [args.emb_file]})
+
+    if args.char:
+        print ('Processing at char level')
+        train(pretrained_weight_dirs, options = ['char'], save_dir = args.save_dir)
+    else:
+        print ('Processing at word level')
+        train(pretrained_weight_dirs, options = ['word'], save_dir = args.save_dir)
+
+
+if __name__ == '__main__':
+
+    main(parse_arguments())

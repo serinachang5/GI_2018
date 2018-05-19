@@ -186,7 +186,7 @@ class Data_loader:
         See method 'get_config' in data_loader_utils.py for more details.
         '''
         seed = 45345
-        assert self.option == 'word', 'self.option is not equal to \'word\''
+
         config = get_config(config_type = config_type)
         fh_e = u'\U0001f64f'.encode('utf8')
         fh_id = self.token2property[fh_e]['id']
@@ -225,12 +225,16 @@ class Data_loader:
             if fh_id in x and pf_id in x:
                 # consider as loss
                 x = [v for v in x if (v != fh_id and v != pf_id)]
-                X_l.append(x + ([0] * (self.max_len - len(x))))
+                if len(x) <= 0:
+                    continue
+                X_l.append((x + [0] * self.max_len)[:self.max_len])
                 continue
             if g_id in x and df_id in x:
                 # consider as aggression
                 x = [v for v in x if (v != g_id and v != df_id)]
-                X_a.append(x + ([0] * (self.max_len - len(x))))
+                if len(x) <= 0:
+                    continue
+                X_a.append((x + [0] * self.max_len)[:self.max_len])
                 continue
 
             # consider for other
