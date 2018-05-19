@@ -179,7 +179,7 @@ class Data_loader:
         unld_val_X, _ = self.filter_by_length(unld_val, min_len, padded, False)
         return unld_tr_X, unld_val_X
 
-    def distant_supv_data(self, config_type = 'ACL'):
+    def distant_supv_data(self, config_type = 'ACL', subsample_enabled = True):
         '''
         config_type = 'ACL' or 'EMNLP'
         It will generate distant supv dataset such that the label distribution is identical to that of labeled data.
@@ -256,22 +256,23 @@ class Data_loader:
         X_l = np.asarray(X_l)
         X_o = np.asarray(X_o)
 
-        print ('Before sampling:')
         print ('Count(Aggression): ', X_a.shape)
         print ('Count(Loss): ', X_l.shape)
         print ('Count(Other): ', X_o.shape)
 
-        actual_counts = {'Loss': X_l.shape[0], 'Aggression': X_a.shape[0], 'Other': X_o.shape[0]}
-        ss_counts = get_subsample_counts(actual_counts, config['desired_dist'])
+        if subsample_enabled:
+            print ('Subsampling is enabled by default . . .')
+            actual_counts = {'Loss': X_l.shape[0], 'Aggression': X_a.shape[0], 'Other': X_o.shape[0]}
+            ss_counts = get_subsample_counts(actual_counts, config['desired_dist'])
 
-        X_a = subsample(X_a, keep_num = ss_counts['Aggression'], seed = seed)
-        X_l = subsample(X_l, keep_num = ss_counts['Loss'], seed = seed)
-        X_o = subsample(X_o, keep_num = ss_counts['Other'], seed = seed)
+            X_a = subsample(X_a, keep_num = ss_counts['Aggression'], seed = seed)
+            X_l = subsample(X_l, keep_num = ss_counts['Loss'], seed = seed)
+            X_o = subsample(X_o, keep_num = ss_counts['Other'], seed = seed)
 
-        print ('After sampling:')
-        print ('Count(Aggression): ', X_a.shape)
-        print ('Count(Loss): ', X_l.shape)
-        print ('Count(Other): ', X_o.shape)
+            print ('After sampling:')
+            print ('Count(Aggression): ', X_a.shape)
+            print ('Count(Loss): ', X_l.shape)
+            print ('Count(Other): ', X_o.shape)
 
         X = np.concatenate((X_a, X_l, X_o), axis = 0)
         y = np.asarray([0] * X_a.shape[0] + [1] * X_l.shape[0] + [2] * X_o.shape[0])

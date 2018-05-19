@@ -28,7 +28,7 @@ def save_as_numpy(model, save_dir, class_idx):
 def main(pretrained_weight_dirs = None, options = ['word'], patience = 7, save_dir = None, epochs = 100):
 
     dl = Data_loader(option = options[0], vocab_size = 40000)
-    X_train, y_train, X_val, y_val = dl.distant_supv_data()
+    X_train, y_train, X_val, y_val = dl.distant_supv_data(subsample_enabled = False)
     # initialize the predictions
     num_val = y_val.shape[0]
     y_pred_val = [None] * num_val
