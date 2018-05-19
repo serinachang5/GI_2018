@@ -23,14 +23,15 @@ def baseline():
 # int_dim and int_dropout are for interaction layer
 # run_num indicates which run we are on
 # if testing, this just checks the set-up, running only 1 epoch and patience = 1
-def nn_with_additions(w2v_modes, splex_modes, user_modes, include_time,
-                      user_rand = True, user_emb_dim = 32,
-                      int_dim=-1, int_dropout=.5,
-                      run_num = None, testing=False):
-    assert(user_emb_dim == 300 or user_emb_dim == 32)
-    if len(w2v_modes) == 0 and splex_modes == 0:
+def nn_with_additions(w2v_modes, splex_modes, user_modes, pw_modes, include_time,
+                      user_rand = True, num_users = 50,
+                      int_dim = -1, int_dropout = .1,
+                      run_num = None, testing = False):
+    if len(w2v_modes) == 0 and len(splex_modes) == 0 and len(user_modes) == 0:
         baseline()
         return
+
+    assert(num_users == 50 or num_users == 300)
 
     dir_name = ''
     if len(w2v_modes) > 0:
@@ -39,10 +40,12 @@ def nn_with_additions(w2v_modes, splex_modes, user_modes, include_time,
         dir_name += 'SP_' + '_'.join(splex_modes)
     if len(user_modes) > 0:
         if user_rand:
-            dir_name += 'USR'
+            dir_name += 'USR' + str(num_users)
         else:
-            dir_name += 'USP'
+            dir_name += 'USP' + str(num_users)
         dir_name += '_'.join(user_modes)
+    if len(pw_modes) > 0:
+        dir_name += 'PW' + '_'.join(pw_modes)
     if include_time:
         dir_name += 'TI'
     if int_dim > 0:
@@ -58,6 +61,9 @@ def nn_with_additions(w2v_modes, splex_modes, user_modes, include_time,
     elif 'wl' in w2v_modes:
         word_emb = 'word_emb_w2v.np'
         word_emb_dim = 300
+    elif '200_wl' in w2v_modes:
+        word_emb = 'word_emb_w2v_200.np'
+        word_emb_dim = 200
     elif 'wl' in splex_modes:
         word_emb = 'word_emb_splex.np'
         word_emb_dim = 2
@@ -67,6 +73,7 @@ def nn_with_additions(w2v_modes, splex_modes, user_modes, include_time,
 
     # set user embedding
     if len(user_modes) > 0:
+<<<<<<< HEAD
         num_users = 700
         if user_rand:
             if user_emb_dim == 300:
@@ -78,10 +85,24 @@ def nn_with_additions(w2v_modes, splex_modes, user_modes, include_time,
         else:
             user_emb_agg = 'user_emb_700_w2v.np'
             user_emb_loss = 'user_emb_700_w2v.np'
+=======
+        if user_rand:  # learn user bias
+            user_emb_agg = None
+            user_emb_loss = None
+            user_emb_dim = 1
+        else:  # use word2vec pretrained
+            user_emb_dim = 300
+            if num_users == 50:
+                user_emb_agg = '50_user_emb.np'
+                user_emb_loss = '50_user_emb.np'
+            else:
+                user_emb_agg = '300_user_emb.np'
+                user_emb_loss = '300_user_emb.np'
+>>>>>>> 77b5a1bc0ecd894cff8a9f16195e37222057d565
     else:
         user_emb_agg = None
         user_emb_loss = None
-        num_users = None
+        user_emb_dim = None
 
     # specify embeddings in pretrained
     pretrained = {}
@@ -97,16 +118,24 @@ def nn_with_additions(w2v_modes, splex_modes, user_modes, include_time,
     all_inputs = pickle.load(open('all_inputs.pkl', 'rb'))
     if 'tl' in splex_modes:
         input_name2id2np['splex_tl'] = all_inputs['splex_tl']
-    if 'cl' in w2v_modes:
-        input_name2id2np['w2v_cl'] = all_inputs['w2v_cl']
-    if 'cl' in splex_modes:
-        input_name2id2np['splex_cl'] = all_inputs['splex_cl']
+    if '60_cl' in w2v_modes:
+        input_name2id2np['60_w2v_cl'] = all_inputs['60_w2v_cl']
+    if '30_cl' in w2v_modes:
+        input_name2id2np['30_w2v_cl'] = all_inputs['30_w2v_cl']
+    if '2_cl' in splex_modes:
+        input_name2id2np['2_splex_cl'] = all_inputs['2_splex_cl']
+    if '30_cl' in splex_modes:
+        input_name2id2np['30_splex_cl'] = all_inputs['30_splex_cl']
     if 'po' in user_modes:
-        input_name2id2np['post_user_index'] = all_inputs['post_user_index']
+        input_name2id2np[str(num_users) + 'post_user_index'] = all_inputs[str(num_users) + '_post_user_index']
     if 'rt' in user_modes:
-        input_name2id2np['retweet_user_index'] = all_inputs['retweet_user_index']
+        input_name2id2np[str(num_users) + 'retweet_user_index'] = all_inputs[str(num_users) + '_retweet_user_index']
     if 'men' in user_modes:
-        input_name2id2np['mention_user_index'] = all_inputs['mention_user_index']
+        input_name2id2np[str(num_users) + 'mention_user_index'] = all_inputs[str(num_users) + '_mention_user_index']
+    if 'w2v' in pw_modes:
+        input_name2id2np['pairwise_w2v'] = all_inputs['pairwise_w2v']
+    if 'splex' in pw_modes:
+        input_name2id2np['pairwise_splex'] = all_inputs['pairwise_splex']
     if include_time:
         input_name2id2np['time'] = all_inputs['time']
 
@@ -136,37 +165,32 @@ def nn_with_additions(w2v_modes, splex_modes, user_modes, include_time,
 
 
 if __name__ == '__main__':
-    interaction_dim = -1  # edit later
-    interaction_dropout = .5   # edit later
-
-    # # base
+    # base
     # for num in range(1,6):
-    #     nn_with_additions(w2v_modes=['wl'], splex_modes=['tl'], user_modes=[], include_time=False,
-    #                       int_dim=interaction_dim, int_dropout=interaction_dropout, run_num=num)
+    #     nn_with_additions(w2v_modes=['200_wl'], splex_modes=[], user_modes=[], pw_modes=[],
+    #                       include_time=False, run_num=num)
 
-    # # w2v as context
-    # for num in range(1,6):
-    #     nn_with_additions(w2v_modes=['wl','cl'], splex_modes=['tl'], user_modes=[], include_time=False,
-    #                       int_dim=interaction_dim, int_dropout=interaction_dropout, run_num=num)
+    # test contexts
+    # for num in range(1,4):
+    #     nn_with_additions(w2v_modes=['200_wl','30_cl'], splex_modes=[], user_modes=[], pw_modes=[],
+    #                       include_time=False, run_num=num)
+    # for num in range(1,4):
+    #     nn_with_additions(w2v_modes=['200_wl'], splex_modes=['2_cl'], user_modes=[], pw_modes=[],
+    #                       include_time=False, run_num=num)
+    # for num in range(1,4):
+    #     nn_with_additions(w2v_modes=['200_wl'], splex_modes=['30_cl'], user_modes=[], pw_modes=[],
+    #                       include_time=False, run_num=num)
 
-    # # splex as context
-    # for num in range(1,6):
-    #     nn_with_additions(w2v_modes=['wl'], splex_modes=['tl','cl'], user_modes=[], include_time=False,
-    #                       int_dim=interaction_dim, int_dropout=interaction_dropout, run_num=num)
-
-    # w2v and splex as context
-    # for num in range(1,6):
-    #     nn_with_additions(w2v_modes=['wl','cl'], splex_modes=['tl','cl'], user_modes=[], include_time=False,
-    #                       int_dim=interaction_dim, int_dropout=interaction_dropout, run_num=num)
-
-    # random user embeddings as context
-    for num in range(1,2):
-        nn_with_additions(w2v_modes=['wl'], splex_modes=['tl'], user_modes=['po'], include_time=False,
-                          user_rand=True, user_emb_dim=32,
-                          int_dim=interaction_dim, int_dropout=interaction_dropout, run_num=num)
-    # for num in range(1,6):
-    #     nn_with_additions(w2v_modes=['wl'], splex_modes=['tl'], user_modes=['po', 'rt'], include_time=False,
-    #                       int_dim=interaction_dim, int_dropout=interaction_dropout, run_num=num)
+    # test user
+    for num in range(1,6):
+        nn_with_additions(w2v_modes=['wl', '60_cl'], splex_modes=['tl', '2_cl'], user_modes=[], pw_modes=[],
+                          include_time=False, user_rand=False, num_users=50, run_num=num)
+    # test pairwise
     # for num in range(1,6):
     #     nn_with_additions(w2v_modes=['wl'], splex_modes=['tl'], user_modes=['po', 'men'], include_time=False,
     #                       int_dim=interaction_dim, int_dropout=interaction_dropout, run_num=num)
+    #     nn_with_additions(w2v_modes=['200_wl'], splex_modes=[], user_modes=[], pw_modes=['w2v','splex'], include_time=False,
+    #                       user_rand=False, num_users=50, run_num=num)
+    # for num in range(1,4):
+    #     nn_with_additions(w2v_modes=['wl'], splex_modes=['tl'], user_modes=[], pw_modes=['splex', 'w2v'], include_time=False,
+    #                       user_rand=False, num_users=50, run_num=num)
