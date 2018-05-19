@@ -48,7 +48,13 @@ def train(pretrained_weight_dirs = None, options = ['word'], patience = 7, save_
             prefix = 'loss'
 
         # initialize a model
-        model = NN_architecture(options = options, prefix = prefix, pretrained_weight_dirs = pretrained_weight_dirs).model
+        if options[0] == 'word':
+            kernel_range = range(1,3)
+        elif options[0] == 'char':
+            kernel_range = range(1,6)
+        else:
+            print('choice %s  not implemented.' % options[0])
+        model = NN_architecture(options = options, prefix = prefix, pretrained_weight_dirs = pretrained_weight_dirs, kernel_range=kernel_range).model
         model.compile(optimizer = 'adam', loss = 'binary_crossentropy')
 
         # create the label for this binary classification task
