@@ -8,6 +8,7 @@ Pipeline for cross-validating SVM.
 """
 
 import argparse
+from collections import Counter
 from data_loader import Data_loader
 from represent_context import Contextifier
 from represent_tweet_level import TweetLevel
@@ -17,15 +18,19 @@ from scipy.sparse import csr_matrix, hstack
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.svm import SVC
+from sentence_tokenizer import int_array_rep
 
 print('Initializing Data Loader...')
-dl = Data_loader()
+dl = Data_loader(labeled_only=True)
 
 def init_models():
     models = {}
 
     if args['include_unigrams']:
         models['unigrams'] = init_uni_model()
+
+    if args['include_char_ngrams']:
+        models['char_ngrams'] = init_char_model()
 
     # store so it doesn't need to be generated every time
     tweet_dict, user_ct_tweets, id_to_location = None, None, None
@@ -49,11 +54,19 @@ def init_models():
 
     return models
 
-# initialize CountVectorizer to build unigrams model
+# initialize unigrams model
 def init_uni_model():
     vocab = [str(idx) for idx in range(1,args['unigram_size']+1)]  # get top <unigram_size> indices
     uni_model = CountVectorizer(vocabulary=vocab, token_pattern='\d+')
     return uni_model
+
+# initialize charngram model
+def init_char_model():
+    min_n = args['char_min_gram']
+    max_n = args['char_max_gram']
+    assert(min_n <= max_n)
+    char_model = CountVectorizer(token_pattern='\d+', ngram_range=(min_n, max_n), max_features=args['char_size'])
+    return char_model
 
 # initialize TweetLevel model
 def init_TL(emb_type, tweet_dict):
@@ -107,7 +120,7 @@ def init_CL(emb_type, tl_tweet_dict, user_ct_tweets, id_to_location):
 
     return cl
 
-def update_cl_models(models):
+def update_models(models):
     for emb_type in ['w2v', 'splex']:
         cl_name = emb_type + '_cl'
         if cl_name in models:
@@ -115,17 +128,18 @@ def update_cl_models(models):
             models[cl_name].set_context_size(args[emb_type + '_size'])
             models[cl_name].set_context_hl_ratio(args[emb_type + '_hl'])
             models[cl_name].set_post_types(parse_post_types(emb_type))
-
+    if 'char_ngrams' in models:
+        models['char_ngrams'] = init_char_model()
 
 def parse_reps_to_include():
-    possible_reps = ['unigrams', 'w2v_tl', 'splex_tl', 'w2v_cl', 'splex_cl']
+    possible_reps = ['unigrams', 'char_ngrams', 'w2v_tl', 'splex_tl', 'w2v_cl', 'splex_cl']
     reps_to_include = []
     for rep_type in possible_reps:
         if args['include_' + rep_type]:
             reps_to_include.append(rep_type)
     return reps_to_include
 
-def transform_data(data, models, tid2np):
+def transform_data(data, models, tid2np, fitted):
     label_to_idx = {'Loss':0, 'Aggression':1, 'Other':2}
     y = np.array([label_to_idx[t['label']] for t in data])
 
@@ -140,7 +154,18 @@ def transform_data(data, models, tid2np):
         sentences = []  # tweets in index form but as strings
         for tweet in data:
             sentences.append(' '.join([str(x) for x in tweet['int_arr']]))
+        # no need to check if fitted because vocab is set
         reps['unigrams'] = models['unigrams'].transform(sentences)
+    if 'char_ngrams' in reps:
+        sentences = []
+        for tweet in data:
+            unicode = dl.convert2unicode(tweet['int_arr'])
+            char_arr = int_array_rep(unicode, option='char', debug=False)
+            sentences.append(' '.join([str(x) for x in char_arr]))
+        if fitted:  # already fitted - must be transforming test
+            reps['char_ngrams'] = models['char_ngrams'].transform(sentences)
+        else:  # hasn't been fitted yet - must be transforming train -> fit on train
+            reps['char_ngrams'] = models['char_ngrams'].fit_transform(sentences)
 
     # build tweet and context representation matrices
     for tweet in data:
@@ -158,9 +183,9 @@ def transform_data(data, models, tid2np):
             reps['add'+str(i+1)].append(tid2np[i][tid])
 
     to_stack = []
-    # standardize order (alphabetical): splex_cl, splex_tl, unigrams, w2v_cl, w2v_tl,
+    # standardize order (alphabetical): char_ngrams, splex_cl, splex_tl, unigrams, w2v_cl, w2v_tl,
     for rep_type, rep in sorted(reps.items(), key=lambda x: x[0]):
-        if rep_type == 'unigrams':
+        if rep_type == 'unigrams' or rep_type == 'char_ngrams':
             to_stack.append(rep)
         else:
             to_stack.append(csr_matrix(np.array(rep)))
@@ -169,6 +194,7 @@ def transform_data(data, models, tid2np):
     return X, y
 
 def cross_validate(dl, models, add_feats):
+    preds = []
     scores = []
     total_f1 = 0
 
@@ -190,7 +216,7 @@ def cross_validate(dl, models, add_feats):
             tst = val
 
         print('Transforming training data...')
-        X, y = transform_data(tr, models, tid2np)
+        X, y = transform_data(tr, models, tid2np, fitted=False)
         print('Training dimensions:', X.shape, y.shape)
 
         if args['weights'] == 'static':
@@ -201,25 +227,32 @@ def cross_validate(dl, models, add_feats):
         clf.fit(X, y)
 
         print('Transforming testing data...')
-        X, y = transform_data(tst, models, tid2np)
+        X, y = transform_data(tst, models, tid2np, fitted=True)
         print('Testing dimensions:', X.shape, y.shape)
 
         pred = clf.predict(X)
         per_class = precision_recall_fscore_support(y, pred, average=None)
         macros = precision_recall_fscore_support(y, pred, average='macro')
+        preds.extend(pred)
         scores.append(per_class)
         print('Loss F1: {}. Agg F1: {}. Other F1: {}. Macro F1: {}.'.format(round(per_class[2][0],5), round(per_class[2][1],5),
                                                                             round(per_class[2][2],5), round(macros[2],5)))
         total_f1 += macros[2]
 
     print('AVERAGE F1:', round(total_f1/5, 5))
-    return scores
+    return preds, scores
 
 def get_specs():
     specs = []
     if args['include_unigrams']:
         specs.append('UNI')
         specs.append(str(args['unigram_size']))
+
+    if args['include_char_ngrams']:
+        specs.append('CH')
+        specs.append(str(args['char_size']))
+        specs.append(str(args['char_min_gram']))
+        specs.append(str(args['char_max_gram']))
 
     if args['include_w2v_tl']:
         if args['use_d2v']:
@@ -258,6 +291,10 @@ def get_specs():
 
     assert(len(specs) > 0)
 
+    if 'pairwise' in args:
+        specs.append('PW')
+        specs.append(args['pairwise'])
+
     if args['weights'] == 'static':
         specs.append('STAT')
     else:
@@ -268,10 +305,6 @@ def get_specs():
     else:
         specs.append('TST')
 
-    if 'pairwise' in args:
-        specs.append('PW')
-        specs.append(args['pairwise'])
-
     return specs
 
 def run_experiment(models = None):
@@ -281,7 +314,7 @@ def run_experiment(models = None):
     if models is None:
         models = init_models()
     else:
-        update_cl_models(models)
+        update_models(models)
 
     # check context level settings
     if args['include_w2v_cl']:
@@ -293,18 +326,18 @@ def run_experiment(models = None):
         print('SPLEX CONTEXT settings:')
         splex_cl.print_settings()
 
-    # get additional feats
+    # get tid2np feats
     add_feats = {}
     if 'pairwise' in args:
         add_feats['pairwise'] = args['pairwise']
 
     # run cv experiment using these representations
-    cv_scores = cross_validate(dl, models, add_feats)
+    cv_preds, cv_scores = cross_validate(dl, models, add_feats)
 
     # save results
     out_file = '../cv_results/' + '_'.join(specs) + '.pkl'
     with open(out_file, 'wb') as f:
-        pickle.dump((args, cv_scores), f)
+        pickle.dump((args, cv_preds, cv_scores), f)
     print('Args and cross-val scores saved to', out_file)
 
 # print precision, recall, and F1 per class in each fold if verbose
@@ -332,40 +365,40 @@ def print_scores(per_class, verbose=True):
 
 # test combos for tweet level
 def test_tl_combos():
-    # args['include_unigrams'] = True
-    # args['include_w2v_tl'] = False
-    # args['include_splex_tl'] = False
-    # args['include_w2v_cl'] = False
-    # args['include_splex_cl'] = False
-    # run_experiment()  # only unigrams
-    #
-    # args['include_splex_tl'] = True
-    # args['splex_scale'] = 'minmax'
-    # run_experiment()  # unigrams + splex minmax
-    # args['splex_scale'] = 'standard'
-    # run_experiment()  # unigrams + splex standard
-
-    # args['include_unigrams'] = False
-    # args['include_w2v_tl'] = True
-    # args['include_splex_tl'] = False
-    # run_experiment()  # only w2v
-    #
-    # args['include_splex_tl'] = True
-    # args['splex_scale'] = 'minmax'
-    # run_experiment()  # w2v + splex minmax
-    # args['splex_scale'] = 'standard'
-    # run_experiment()  # w2v + splex standard
-
     args['include_unigrams'] = True
-    args['include_w2v_tl'] = True
+    args['include_w2v_tl'] = False
     args['include_splex_tl'] = False
-    run_experiment()  # unigrams and w2v
+    args['include_w2v_cl'] = False
+    args['include_splex_cl'] = False
+    run_experiment()  # only unigrams
 
     args['include_splex_tl'] = True
     args['splex_scale'] = 'minmax'
-    run_experiment()  # unigrams + w2v + splex minmax
+    run_experiment()  # unigrams + splex minmax
     args['splex_scale'] = 'standard'
-    run_experiment()  # unigrams+  w2v + splex standard
+    run_experiment()  # unigrams + splex standard
+
+    args['include_unigrams'] = False
+    args['include_w2v_tl'] = True
+    args['include_splex_tl'] = False
+    run_experiment()  # only w2v
+
+    args['include_splex_tl'] = True
+    args['splex_scale'] = 'minmax'
+    run_experiment()  # w2v + splex minmax
+    args['splex_scale'] = 'standard'
+    run_experiment()  # w2v + splex standard
+
+    # args['include_unigrams'] = True
+    # args['include_w2v_tl'] = True
+    # args['include_splex_tl'] = False
+    # run_experiment()  # unigrams and w2v
+    #
+    # args['include_splex_tl'] = True
+    # args['splex_scale'] = 'minmax'
+    # run_experiment()  # unigrams + w2v + splex minmax
+    # args['splex_scale'] = 'standard'
+    # run_experiment()  # unigrams+  w2v + splex standard
 
 # find best w2v context
 def test_w2v_context():
@@ -439,7 +472,6 @@ def test_splex_context():
 
 def test_pairwise():
     # previous optimal
-    print('Testing context-level combos.')
     args['include_unigrams'] = False
     args['include_w2v_tl'] = True
     args['include_splex_tl'] = True
@@ -459,6 +491,25 @@ def test_pairwise():
     run_experiment(models=models)
 
     args['pairwise'] = 'both'
+    run_experiment(models=models)
+
+def test_char_ngrams():
+    args['include_unigrams'] = False
+    args['include_char_ngrams'] = True
+    args['include_w2v_tl'] = True
+    args['include_splex_tl'] = True
+    args['include_w2v_cl'] = False
+    args['include_splex_cl'] = False
+    models = init_models()
+
+    args['char_size'] = 10000
+
+    args['char_min_gram'] = 1
+    args['char_max_gram'] = 2
+    run_experiment(models=models)
+
+    args['char_min_gram'] = 1
+    args['char_max_gram'] = 4
     run_experiment(models=models)
 
 # test combos for context level
@@ -487,15 +538,28 @@ def test_cl_combo():
 
     run_experiment(models=models)
 
+def save_preds_for_stat_sig():
+    path_to_best = '../cv_results/WT_ST_standard_WC_30_0.5_STAT_TST.pkl'
+    args, preds, scores = pickle.load(open(path_to_best, 'rb'))
+    my_idx_to_class = {0:'Loss', 1:'Aggression', 2:'Other'}
+    ruiqi_class_to_idx = {'Aggression':0, 'Loss':1, 'Other':2}
+    translated_preds = np.array([ruiqi_class_to_idx[my_idx_to_class[pred]] for pred in preds])
+    print(Counter(translated_preds))
+    np.savetxt('serina_svm_pred.np', translated_preds)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description = '')
     parser.add_argument('-w', '--weights', type = str, default = 'static', help = 'weights for SVM: \'dynamic\' or \'static\'')
 
-    parser.add_argument('-iu', '--include_unigrams', type = bool, default = True, help = 'whether to include unigrams')
+    parser.add_argument('-iu', '--include_unigrams', type = bool, default = False, help = 'whether to include unigrams')
     parser.add_argument('-usize', '--unigram_size', type = int, default = 10000, help = 'number of unigrams to include')
 
-    parser.add_argument('-iwt', '--include_w2v_tl', type = bool, default = False, help = 'whether to include w2v embeddings at tweet-level; if false, w2v-tweet params are ignored')
+    parser.add_argument('-ic', '--include_char_ngrams', type = bool, default = False, help = 'whether to include char n-grams')
+    parser.add_argument('-csize', '--char_size', type = int, default = 20000, help = 'number of char ngrams to include')
+    parser.add_argument('-cmin', '--char_min_gram', type = int, default = 1, help = 'minimum n for char n-grams')
+    parser.add_argument('-cmax', '--char_max_gram', type = int, default = 5, help = 'maximum n for char n-grams')
+
+    parser.add_argument('-iwt', '--include_w2v_tl', type = bool, default = True, help = 'whether to include w2v embeddings at tweet-level; if false, w2v-tweet params are ignored')
     parser.add_argument('-d2v', '--use_d2v', type = bool, default = False, help = 'use doc2vec instead of aggregated w2v embedding for tweet-level')
     parser.add_argument('-wtmode', '--w2v_tl_mode', type = str, default = 'avg', help = 'how to combine w2v embeddings at tweet-level')
 
@@ -504,11 +568,11 @@ if __name__ == '__main__':
     parser.add_argument('-isub', '--include_sub_splex_tl', type = bool, default = False, help = 'whether to include splex substance use scores at tweet-level')
     parser.add_argument('-stmode', '--splex_tl_mode', type = str, default = 'sum', help = 'how to combine splex scores into tweet-level')
 
-    parser.add_argument('-iwc', '--include_w2v_cl', type = bool, default = False, help = 'whether to include w2v embeddings in context; if false, w2v-context params are ignored')
+    parser.add_argument('-iwc', '--include_w2v_cl', type = bool, default = True, help = 'whether to include w2v embeddings in context; if false, w2v-context params are ignored')
     parser.add_argument('-wcmode', '--w2v_cl_mode', type = str, default = 'avg', help = 'how to combine tweet-level w2v embeddings into context-level')
-    parser.add_argument('-wcsize', '--w2v_size', type = int, default = 60, help = 'w2v-context: number of days to look back')
+    parser.add_argument('-wcsize', '--w2v_size', type = int, default = 30, help = 'w2v-context: number of days to look back')
     parser.add_argument('-wchl', '--w2v_hl', type = float, default = .5, help = 'w2v-context: half-life ratio')
-    parser.add_argument('-wcrt', '--w2v_use_rt', type = bool, default = True, help = 'w2v-context: User A retweets User B\'s tweet -- if true,this tweet will be counted in User A and User B\'s context')
+    parser.add_argument('-wcrt', '--w2v_use_rt', type = bool, default = False, help = 'w2v-context: User A retweets User B\'s tweet -- if true,this tweet will be counted in User A and User B\'s context')
     parser.add_argument('-wcmen', '--w2v_use_mentions', type = bool, default = False, help = 'w2v-context: User A tweets, mentioning User B -- if true, this tweet will be in User A and User B\'s context')
     parser.add_argument('-wcrtmen', '--w2v_use_rt_mentions', type = bool, default = False, help = 'w2v-context: User A retweets User B\'s tweet, which mentioned User C -- if true,this tweet will counted in User A and User C\'s history')
 
@@ -525,13 +589,16 @@ if __name__ == '__main__':
     args = vars(parser.parse_args())
     print(args)
 
+    test_char_ngrams()
     # test_tl_combos()
     # test_w2v_context()
     # test_splex_context()
     # test_cl_combo()
     # run_experiment()
 
-    test_pairwise()
+    # test_pairwise()
 
-    # per_class = pickle.load(open('../cv_results/WT_ST_standard_WC_60_0.5_rt_mn_STAT_TST.pkl', 'rb'))[1]
+    # per_class = pickle.load(open('../cv_results/UNI_10000_STAT_TST.pkl', 'rb'))[1]
     # print_scores(per_class)
+
+    # save_preds_for_stat_sig()
