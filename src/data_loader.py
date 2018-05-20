@@ -179,24 +179,39 @@ class Data_loader:
         unld_val_X, _ = self.filter_by_length(unld_val, min_len, padded, False)
         return unld_tr_X, unld_val_X
 
-    def distant_supv_data(self, config_type = 'ACL', subsample_enabled = True):
+    def filter_by_emoji(self, x, emoji_ids):
+        found_all = True
+        for eid in emoji_ids:
+            if eid not in x:
+                found_all = False
+        if not found_all:
+            return None
+        else:
+            _x = [v for v in x if v not in emoji_ids]
+            if len(_x) <= 0:
+                return None
+            _x = (_x + [0] * self.max_len)[:self.max_len]
+            return _x
+
+    def distant_supv_data(self, config_type = 'ACL', subsample_enabled = True, check_both = False):
         '''
         config_type = 'ACL' or 'EMNLP'
         It will generate distant supv dataset such that the label distribution is identical to that of labeled data.
         See method 'get_config' in data_loader_utils.py for more details.
         '''
         seed = 45345
-        assert self.option == 'word', 'self.option is not equal to \'word\''
+
         config = get_config(config_type = config_type)
         fh_e = u'\U0001f64f'.encode('utf8')
         fh_id = self.token2property[fh_e]['id']
         pf_e = u'\U0001f614'.encode('utf8')
         pf_id = self.token2property[pf_e]['id']
+        top_two_loss = [fh_id, pf_id]
         g_e = u'\U0001f52b'.encode('utf8')
         g_id = self.token2property[g_e]['id']
         df_e = u'\U0001f608'.encode('utf8')
         df_id = self.token2property[df_e]['id']
-
+        top_two_agg = [g_id, df_id]
         top_loss_ids = []
         for emoji in config['top_loss_emojis']:
             emoji_en = emoji.encode('utf8')
@@ -222,15 +237,22 @@ class Data_loader:
         X_o = []
         for tweet_dict in unld_tr:
             x = tweet_dict['int_arr']
-            if fh_id in x and pf_id in x:
-                # consider as loss
-                x = [v for v in x if (v != fh_id and v != pf_id)]
-                X_l.append(x + ([0] * (self.max_len - len(x))))
+            # check for loss
+            if check_both:
+                _x = self.filter_by_emoji(x, top_two_loss)
+            else:
+                _x = self.filter_by_emoji(x, top_two_loss[:1])
+            if _x is not None:
+                X_l.append(_x)
                 continue
-            if g_id in x and df_id in x:
-                # consider as aggression
-                x = [v for v in x if (v != g_id and v != df_id)]
-                X_a.append(x + ([0] * (self.max_len - len(x))))
+
+            # check for aggression
+            if check_both:
+                _x = self.filter_by_emoji(x, top_two_agg)
+            else:
+                _x = self.filter_by_emoji(x, top_two_agg[:1])
+            if _x is not None:
+                X_a.append(_x)
                 continue
 
             # consider for other

@@ -73,6 +73,19 @@ def nn_with_additions(w2v_modes, splex_modes, user_modes, pw_modes, include_time
 
     # set user embedding
     if len(user_modes) > 0:
+<<<<<<< HEAD
+        num_users = 700
+        if user_rand:
+            if user_emb_dim == 300:
+                user_emb_agg = 'user_emb_700_agg_rand_300.np'
+                user_emb_loss = 'user_emb_700_loss_rand_300.np'
+            elif:
+                user_emb_agg = 'user_emb_700_agg_rand_32.np'
+                user_emb_loss = 'user_emb_700_loss_rand_32.np'
+        else:
+            user_emb_agg = 'user_emb_700_w2v.np'
+            user_emb_loss = 'user_emb_700_w2v.np'
+=======
         if user_rand:  # learn user bias
             user_emb_agg = None
             user_emb_loss = None
@@ -85,6 +98,7 @@ def nn_with_additions(w2v_modes, splex_modes, user_modes, pw_modes, include_time
             else:
                 user_emb_agg = '300_user_emb.np'
                 user_emb_loss = '300_user_emb.np'
+>>>>>>> 77b5a1bc0ecd894cff8a9f16195e37222057d565
     else:
         user_emb_agg = None
         user_emb_loss = None
@@ -173,6 +187,8 @@ if __name__ == '__main__':
                           include_time=False, user_rand=False, num_users=50, run_num=num)
     # test pairwise
     # for num in range(1,6):
+    #     nn_with_additions(w2v_modes=['wl'], splex_modes=['tl'], user_modes=['po', 'men'], include_time=False,
+    #                       int_dim=interaction_dim, int_dropout=interaction_dropout, run_num=num)
     #     nn_with_additions(w2v_modes=['200_wl'], splex_modes=[], user_modes=[], pw_modes=['w2v','splex'], include_time=False,
     #                       user_rand=False, num_users=50, run_num=num)
     # for num in range(1,4):
