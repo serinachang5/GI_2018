@@ -13,6 +13,7 @@ from model_def import NN_architecture
 from keras.callbacks import EarlyStopping, ModelCheckpoint
 from sklearn.metrics import f1_score
 from sklearn.metrics import classification_report
+from collections import defaultdict
 
 
 def save_as_numpy(model, save_dir, class_idx):
@@ -26,7 +27,28 @@ def save_as_numpy(model, save_dir, class_idx):
     pickle.dump(layers_dict, open(os.path.join(save_dir, 'pretrained_weights_as_numpy_' + str(class_idx) + '.p'), "wb"))
 
 
-def train(pretrained_weight_dirs = None, options = ['word'], check_both = False, patience = 7, save_dir = None, epochs = 100):
+def adapt_vocab(X_train, X_val):
+    threshold = 3
+
+    wc = defaultdict(int)
+    for xs in X_train:
+        for x in xs:
+            wc[x] += 1
+
+    # define a filter here
+    def f(x):
+        return x if wc[x] >= threshold else 1
+
+    for ii in range(len(X_train)):
+        for jj in range(len(X_train[ii])):
+            X_train[ii][jj] = f(X_train[ii][jj])
+
+    for ii in range(len(X_val)):
+        for jj in range(len(X_val[ii])):
+            X_val[ii][jj] = f(X_val[ii][jj])
+
+
+def train(pretrained_weight_dirs = None, options = ['word'], adapt_vocabulary = False, check_both = False, patience = 7, save_dir = None, epochs = 100):
 
     if options[0] == 'word':
         dl = Data_loader(option = 'word')
@@ -34,6 +56,11 @@ def train(pretrained_weight_dirs = None, options = ['word'], check_both = False,
         dl = Data_loader(option = 'char', vocab_size = 1200, max_len = 150)
 
     X_train, y_train, X_val, y_val = dl.distant_supv_data(subsample_enabled = False, check_both = check_both)
+
+    if adapt_vocabulary:
+        print ('Adapting the vocabulary . . .')
+        adapt_vocab(X_train, X_val)
+
     # initialize the predictions
     num_val = y_val.shape[0]
     y_pred_val = [None] * num_val
@@ -135,6 +162,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description = '')
     parser.add_argument('-sd', '--save-dir', type = str, required = True, help = 'directory where the model should be saved.')
     parser.add_argument('-ef', '--emb-file', type = str, help = 'path to pre-trained embeddings file.')
+    parser.add_argument('-av', '--adapt-vocabulary', type = bool, default = False, help = 'Set it to \'True\' to adapt vocabulary to this dataset')
     parser.add_argument('-ch', '--char', type = bool, default = False, help = 'Whether to process at word level or char level, default: False')
     parser.add_argument('-t2', '--top-two', type = bool, default = False, help = 'If t2 is enabled, only tweets containing both of the top two emojis will be used for DS, default: False')
     args = parser.parse_args()
@@ -154,10 +182,10 @@ def main(args):
 
     if args.char:
         print ('Processing at char level')
-        train(pretrained_weight_dirs, options = ['char'], check_both = args.top_two, save_dir = args.save_dir)
+        train(pretrained_weight_dirs, options = ['char'], adapt_vocabulary = args.adapt_vocabulary, check_both = args.top_two, save_dir = args.save_dir)
     else:
         print ('Processing at word level')
-        train(pretrained_weight_dirs, options = ['word'], check_both = args.top_two, save_dir = args.save_dir)
+        train(pretrained_weight_dirs, options = ['word'], adapt_vocabulary = args.adapt_vocabulary, check_both = args.top_two, save_dir = args.save_dir)
 
 
 if __name__ == '__main__':
