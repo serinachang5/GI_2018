@@ -26,14 +26,14 @@ def save_as_numpy(model, save_dir, class_idx):
     pickle.dump(layers_dict, open(os.path.join(save_dir, 'pretrained_weights_as_numpy_' + str(class_idx) + '.p'), "wb"))
 
 
-def train(pretrained_weight_dirs = None, options = ['word'], patience = 7, save_dir = None, epochs = 100):
+def train(pretrained_weight_dirs = None, options = ['word'], check_both = False, patience = 7, save_dir = None, epochs = 100):
 
     if options[0] == 'word':
         dl = Data_loader(option = 'word')
     else:
         dl = Data_loader(option = 'char', vocab_size = 1200, max_len = 150)
 
-    X_train, y_train, X_val, y_val = dl.distant_supv_data(subsample_enabled = False)
+    X_train, y_train, X_val, y_val = dl.distant_supv_data(subsample_enabled = False, check_both = check_both)
     # initialize the predictions
     num_val = y_val.shape[0]
     y_pred_val = [None] * num_val
@@ -49,12 +49,13 @@ def train(pretrained_weight_dirs = None, options = ['word'], patience = 7, save_
 
         # initialize a model
         if options[0] == 'word':
-            kernel_range = range(1,3)
+            kernel_range = range(1, 3)
         elif options[0] == 'char':
-            kernel_range = range(1,6)
+            kernel_range = range(1, 6)
         else:
             print('choice %s  not implemented.' % options[0])
-        model = NN_architecture(options = options, prefix = prefix, pretrained_weight_dirs = pretrained_weight_dirs, kernel_range=kernel_range).model
+
+        model = NN_architecture(options = options, prefix = prefix, pretrained_weight_dirs = pretrained_weight_dirs, kernel_range = kernel_range).model
         model.compile(optimizer = 'adam', loss = 'binary_crossentropy')
 
         # create the label for this binary classification task
@@ -134,7 +135,8 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description = '')
     parser.add_argument('-sd', '--save-dir', type = str, required = True, help = 'directory where the model should be saved.')
     parser.add_argument('-ef', '--emb-file', type = str, help = 'path to pre-trained embeddings file.')
-    parser.add_argument('-ch', '--char', type = bool, default = False, help = 'Whether to process at word level or char level')
+    parser.add_argument('-ch', '--char', type = bool, default = False, help = 'Whether to process at word level or char level, default: False')
+    parser.add_argument('-t2', '--top-two', type = bool, default = False, help = 'If t2 is enabled, only tweets containing both of the top two emojis will be used for DS, default: False')
     args = parser.parse_args()
     return args
 
@@ -145,14 +147,17 @@ def main(args):
     # sys.argv[2] : path to pre-trained embeddings file
 
     # save_dir = '/home/siddharth/workspace/GI-DL/Experiments/emnlp_paper/runs/run10'
-    pretrained_weight_dirs = ({'aggression_word_embed': [args.emb_file], 'loss_word_embed': [args.emb_file]})
+    if args.emb_file is None:
+        pretrained_weight_dirs = None
+    else:
+        pretrained_weight_dirs = ({'aggression_word_embed': [args.emb_file], 'loss_word_embed': [args.emb_file]})
 
     if args.char:
         print ('Processing at char level')
-        train(pretrained_weight_dirs, options = ['char'], save_dir = args.save_dir)
+        train(pretrained_weight_dirs, options = ['char'], check_both = args.top_two, save_dir = args.save_dir)
     else:
         print ('Processing at word level')
-        train(pretrained_weight_dirs, options = ['word'], save_dir = args.save_dir)
+        train(pretrained_weight_dirs, options = ['word'], check_both = args.top_two, save_dir = args.save_dir)
 
 
 if __name__ == '__main__':
