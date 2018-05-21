@@ -136,7 +136,7 @@ def adapt_vocab(X_train, X_list):
 class Experiment:
 
     def __init__(self, experiment_dir, input_name2id2np=None, adapt_train_vocab=False,
-                 comments='', epochs=100, patience=7, noise_function=None, filter_function=None,
+                 comments='', epochs=100, patience=4, noise_function=None, filter_function=None, fold=5,
                  predict_ens_test=True, by_fold=False,
                  **kwargs):
         """
@@ -209,7 +209,7 @@ class Experiment:
         if input_name2id2np is None:
             input_name2id2np = {}
         self.input_name2id2np = input_name2id2np
-        self.fold = 5
+        self.fold = fold
         self.dl = Data_loader(option='both', labeled_only=True, **kwargs)
         self.epochs, self.patience = epochs, patience
         self.noise_function, self.filter_function = noise_function, filter_function
@@ -256,10 +256,11 @@ class Experiment:
 
             # if no pretrained weights, adapting vocabulary so that those who appear in
             # X_train less than twice would not be counted
-            if self.adapt_train_vocab and self.predict_ens_test:
-                adapt_vocab(X_train, (X_val, X_test, X_ensemble, X_held_out))
-            else:
-                adapt_vocab(X_train, (X_val, X_held_out))
+            if self.adapt_train_vocab:
+                if self.predict_ens_test:
+                    adapt_vocab(X_train, (X_val, X_test, X_ensemble, X_held_out))
+                else:
+                    adapt_vocab(X_train, (X_val, X_test))
 
             class_weight = calculate_class_weight(y_train)
 
