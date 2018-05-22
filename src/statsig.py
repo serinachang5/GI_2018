@@ -22,7 +22,7 @@ def load_labels(path, label_dict=None):
             return labels
 
 def compute_macro_f1(gold_labels, system_labels):
-    return f1_score(gold_labels, system_labels, average="macro")
+    return f1_score(gold_labels, system_labels)
 
 def compute_accuracy(gold_labels, system_labels):
     return accuracy_score(gold_labels, system_labels)
@@ -125,7 +125,10 @@ def main():
     gold_labels, label_dict = load_labels(args.gold_labels)
     system_labels1 = load_labels(args.system_labels[0], label_dict=label_dict)
     system_labels2 = load_labels(args.system_labels[1], label_dict=label_dict)
-
+    
+    print(f1_score(gold_labels, system_labels1, average=None))
+    print(f1_score(gold_labels, system_labels2, average=None))
+    
     if len(gold_labels) != len(system_labels1):
         sys.stderr.write("Size of gold and system 1 labels does not agree!\n")
         sys.stderr.flush()
@@ -142,11 +145,16 @@ def main():
         for label in sorted_labels:
             print("Computing significance for ground truth = {}".format(label))
             label_idx = label_dict[label]
+            '''
             I = gold_labels == label_idx
             gold_labels_cc = gold_labels[I]
             system_labels1_cc = system_labels1[I]
             system_labels2_cc = system_labels2[I]
-
+            '''
+            gold_labels_cc = gold_labels == label_idx
+            system_labels1_cc = system_labels1 == label_idx
+            system_labels2_cc = system_labels2 == label_idx
+            
             pval = test_significance(
                 args.metric, gold_labels_cc, system_labels1_cc, system_labels2_cc, 
                 args.samples)
@@ -155,8 +163,12 @@ def main():
         
         print("Summary Results")
         print("===============")
-        for label, pval in zip(sorted_labels, pvals):
-            print("{}: pval={:8.6f}".format(label, pval))
+        with open('.tmp.txt', 'w') as out_file:
+            print(label_dict)
+            for label, pval in zip(sorted_labels, pvals):
+                print("{}: pval={:8.6f}".format(label, pval))
+                out_file.write("{}: pval={:8.6f}\n".format(label, pval))
+    
 
     else:
         test_significance(
